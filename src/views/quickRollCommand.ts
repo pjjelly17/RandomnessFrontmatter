@@ -1,15 +1,15 @@
 /**
  * "Quick roll table" command — Phase 1 item #3.
  *
- * Read-only sibling to "roll into property": pick any table
- * already in scope for the active note, roll it immediately, show
- * a short Notice, and copy the full rendered result to the
- * clipboard.
+ * Read-only sibling to "roll into property": pick any table in the
+ * vault, roll it immediately, show a short Notice, and copy the
+ * full rendered result to the clipboard.
  *
  * Why it does not mutate notes: unlike rollIntoProperty, there is
  * no frontmatter write target and no need to inject a `Use:` line.
- * The modal is intentionally limited to in-scope tables, so the
- * entire flow stays side-effect-free with respect to vault content.
+ * Out-of-scope rolls go through an API path that evaluates against
+ * a synthetic in-memory note source instead of touching the active
+ * note.
  */
 
 import { Notice, SuggestModal, TFile } from "obsidian";
@@ -46,9 +46,10 @@ class QuickRollSuggestModal extends SuggestModal<TableSource> {
         const nameText = item.isMain ? `★ ${item.name}` : item.name;
         el.createEl("div", { cls: "randomness-suggest-name", text: nameText });
 
-        // This picker only shows in-scope tables, so the
-        // "(not imported)" decoration would be inaccurate noise.
-        el.createEl("div", { cls: "randomness-suggest-source", text: item.source });
+        el.createEl("div", {
+            cls: "randomness-suggest-source",
+            text: item.inScope ? item.source : `(not imported) ${item.source}`,
+        });
     }
 
     async onChooseSuggestion(
@@ -56,7 +57,16 @@ class QuickRollSuggestModal extends SuggestModal<TableSource> {
         _evt: MouseEvent | KeyboardEvent,
     ): Promise<void> {
         try {
-            const result = await this.plugin.api.roll(item.name);
+            if (!item.inScope && !item.filePath) {
+                new Notice(
+                    "Randomness Frontmatter: quick-roll cannot resolve table source",
+                );
+                return;
+            }
+
+            const result = item.inScope
+                ? await this.plugin.api.roll(item.name)
+                : await this.plugin.api.rollUnscoped(item.name, item.filePath);
 
             try {
                 // Clipboard access can fail on some desktop setups
@@ -110,18 +120,18 @@ export function registerQuickRollCommand(plugin: RandomnessPlugin): void {
                 return;
             }
 
-            const inScopeTables = tables.filter((table) => table.inScope);
-            if (inScopeTables.length === 0) {
+            if (tables.length === 0) {
                 new Notice(
-                    "Randomness Frontmatter: no in-scope tables in this note",
+                    "Randomness Frontmatter: no tables found in vault",
                 );
                 return;
             }
 
             // Re-query on every command invocation and open a fresh
             // modal so the picker always reflects the current note's
-            // live scope without any shared cache.
-            new QuickRollSuggestModal(plugin, inScopeTables).open();
+            // live scope without any shared cache. Preserve the API's
+            // in-scope-first ordering; do not re-sort here.
+            new QuickRollSuggestModal(plugin, tables).open();
         },
     });
 }

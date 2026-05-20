@@ -58,6 +58,19 @@ export interface RandomnessFrontmatterAPI {
     readonly version: string;
     /** Wraps the requested table name as [@name]; names that need IPP3 escaping must already be passed in parser-safe form. */
     roll(tableName: string, opts?: RollOptions): Promise<RollResult>;
+    /**
+     * Roll a table referenced by its name + the vault-relative path of
+     * the .ipt file that defines it. Bypasses the caller note's Use:
+     * graph by evaluating against a synthetic note source that imports
+     * only that file, and fires onRoll listeners just like roll().
+     *
+     * Throws if the file doesn't exist, doesn't parse, or doesn't define
+     * a table by that name.
+     */
+    rollUnscoped(
+        tableName: string,
+        filePath: string
+    ): Promise<RollResult>;
     rollExpression(rawExpr: string, opts?: RollOptions): Promise<RollResult>;
     rollIntoProperty(
         key: string,
@@ -138,9 +151,68 @@ export function createApi(
         return rollExpression(expression, internalOpts);
     };
 
+    const rollUnscoped = async (
+        tableName: string,
+        filePath: string
+    ): Promise<RollResult> => {
+        const file = plugin.app.vault.getAbstractFileByPath(filePath);
+        if (!(file instanceof TFile)) {
+            throw new Error(
+                `Table file "${filePath}" does not exist in the vault`
+            );
+        }
+
+        let source: string;
+        try {
+            source = await plugin.app.vault.read(file);
+        } catch (error: unknown) {
+            throw new Error(
+                `Failed to read table file "${filePath}": ${errorMessage(error)}`
+            );
+        }
+
+        let parsed;
+        try {
+            parsed = parseGeneratorFile(source);
+        } catch (error: unknown) {
+            throw new Error(
+                `Failed to parse table file "${filePath}": ${errorMessage(error)}`
+            );
+        }
+
+        if (!parsed.tables.some((table) => table.name === tableName)) {
+            throw new Error(
+                `Table "${tableName}" was not found in "${filePath}"`
+            );
+        }
+
+        const expression = `[@${tableName}]`;
+        const syntheticSource = `\`\`\`randomness\nUse: ${filePath}\n\`\`\``;
+        // Colon-prefixed sentinel marks this as synthetic context, not a
+        // real vault path, while still carrying the imported file for logs.
+        const syntheticNotePath = `__quick_roll__:${filePath}`;
+        const resultText = await evaluateInlineExpression(
+            expression,
+            syntheticNotePath,
+            plugin,
+            syntheticSource
+        );
+        const result: RollResult = {
+            result: resultText,
+            table: tableName,
+            expression,
+            source: undefined,
+            timestamp: new Date().toISOString(),
+            rollId: globalThis.crypto.randomUUID(),
+        };
+        emitRoll(result);
+        return result;
+    };
+
     return {
         version: API_VERSION,
         roll,
+        rollUnscoped,
         rollExpression,
         async rollIntoProperty(
             key: string,

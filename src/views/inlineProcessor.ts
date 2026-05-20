@@ -250,7 +250,8 @@ async function processOne(
 export async function evaluateInlineExpression(
     expr: string,
     notePath: string,
-    plugin: RandomnessPlugin
+    plugin: RandomnessPlugin,
+    noteSource?: string
 ): Promise<string> {
     const { vault } = plugin.app;
     const settings = plugin.settings;
@@ -260,25 +261,28 @@ export async function evaluateInlineExpression(
     // freshly-created note that hasn't persisted yet), fall back to
     // empty source — the expression still evaluates, just without
     // codeblock context.
-    let noteSource = "";
-    try {
-        noteSource = await vault.adapter.read(notePath);
-    } catch {
-        // intentionally swallowed; see comment above
+    let resolvedNoteSource = noteSource;
+    if (resolvedNoteSource === undefined) {
+        resolvedNoteSource = "";
+        try {
+            resolvedNoteSource = await vault.adapter.read(notePath);
+        } catch {
+            // intentionally swallowed; see comment above
+        }
     }
 
     // Prefetch the Use: graph reachable from the note's codeblocks.
     const asyncSource = vaultFileSource(vault);
     const prefetch = await prefetchUseGraph({
         entryPath: notePath,
-        entrySource: noteSource,
+        entrySource: resolvedNoteSource,
         generatorRoot: settings.generatorRoot || undefined,
         source: asyncSource,
     });
 
     const bundle = buildInlineBundle(expr, {
         notePath,
-        noteSource,
+        noteSource: resolvedNoteSource,
         source: prefetch.source,
         generatorRoot: settings.generatorRoot || undefined,
     });
