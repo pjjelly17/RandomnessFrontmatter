@@ -93,7 +93,7 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - [x] ISC-20: On selection `api.roll(name)` → clipboard.writeText (Wayland-safe try/catch) + Notice `[@name] → result` truncated to 120 chars
 - [x] ISC-21: Fresh modal + fresh `tablesWithSources()` call per invocation; no module-level cache
 
-**Behavior-verification pending PJ smoke test.**
+**Behavior-verified by PJ 2026-05-20 — quick-roll fires + clipboard populated (commit `6c266dd`).**
 
 ### Phase 1 — Item 4: Session-log auto-append
 - [ ] ISC-22: Setting toggle: "Auto-append rolls to active session note"
