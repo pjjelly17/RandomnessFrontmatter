@@ -88,10 +88,12 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 **Behavior-verified by PJ in NoStone5e 2026-05-20 (commit `39553cd`). Out-of-scope pick → Use: line written → roll lands → frontmatter populated. All 10 Phase 1.5 ISCs live.**
 
 ### Phase 1 — Item 3: Quick-roll palette
-- [ ] ISC-18: Single command registered: `randomness-frontmatter:quick-roll`
-- [ ] ISC-19: SuggestModal with fuzzy search across all visible tables
-- [ ] ISC-20: On selection, result copied to clipboard + Notice shown
-- [ ] ISC-21: Tables list refreshes on each invocation (no stale cache)
+- [x] ISC-18: Command `randomness-frontmatter:quick-roll` registered (quickRollCommand.ts L90, main.ts L124)
+- [x] ISC-19: `QuickRollSuggestModal` with case-insensitive substring fuzzy search; filters `tablesWithSources()` to `inScope === true` (L26)
+- [x] ISC-20: On selection `api.roll(name)` → clipboard.writeText (Wayland-safe try/catch) + Notice `[@name] → result` truncated to 120 chars
+- [x] ISC-21: Fresh modal + fresh `tablesWithSources()` call per invocation; no module-level cache
+
+**Behavior-verification pending PJ smoke test.**
 
 ### Phase 1 — Item 4: Session-log auto-append
 - [ ] ISC-22: Setting toggle: "Auto-append rolls to active session note"

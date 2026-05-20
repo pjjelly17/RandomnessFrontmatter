@@ -35,6 +35,7 @@ import {
 import { TableAutocomplete } from "./tableAutocomplete";
 import { createApi, RandomnessFrontmatterAPI } from "../api";
 import { registerRollIntoPropertyCommand } from "./rollIntoPropertyCommand";
+import { registerQuickRollCommand } from "./quickRollCommand";
 
 export default class RandomnessPlugin extends Plugin {
     settings: RandomnessSettings = DEFAULT_SETTINGS;
@@ -117,8 +118,10 @@ export default class RandomnessPlugin extends Plugin {
             callback: () => void openReferenceView(this),
         });
 
-        // Phase 1 item #2 — roll into frontmatter property.
+        // Phase 1 items #2 and #3 — roll-into-property and
+        // quick-roll commands.
         registerRollIntoPropertyCommand(this);
+        registerQuickRollCommand(this);
     }
 
     async onunload(): Promise<void> {
