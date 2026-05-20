@@ -1,13 +1,48 @@
-# Randomness
+# Randomness Frontmatter
 
-An [Obsidian](https://obsidian.md) plugin for IPP3-compatible random generators.
+A fork of [Randomness](https://github.com/Obsidian-TTRPG-Community/Randomness)
+adding a public JS API, frontmatter property writes, a quick-roll palette,
+session-log auto-append, roll history, and vault-global used-result tracking.
+DM-cockpit additions on top of the upstream IPP3 engine — every original
+feature still works identically.
 
 Roll on tables inline with `` `rdm:[@Names]` ``, embed full generators in
 ````randomness```` codeblocks, and re-use existing `.ipt` files from twenty
 years of the [Inspiration Pad](https://nbos.com/products/inspiration-pad)
 ecosystem.
 
-## Features
+## What this fork adds (Phase 1)
+
+- **Public JS API** at `app.plugins.plugins["randomness-frontmatter"].api`
+  — `roll`, `rollExpression`, `rollUnscoped`, `rollIntoProperty`, `tables`,
+  `tablesWithSources`, `onRoll`. Stable contract for third-party plugins,
+  Templater scripts, and DataviewJS consumers.
+- **Roll into frontmatter property** — command palette → "Roll table into
+  frontmatter property…". Two-step modal: pick table, type property key,
+  Enter. Result lands in the active note's frontmatter via
+  `app.fileManager.processFrontMatter`. Picks any vault `.ipt` table;
+  out-of-scope tables auto-add a `Use:` line so the next inline call to
+  the same table works without re-running anything.
+- **Quick-roll palette** — command palette → "Quick roll table…". Fuzzy
+  pick any vault table, get a result + clipboard copy. Zero note mutation.
+- **Session log auto-append** — every roll can optionally append a
+  `- MM/DD/YYYY HH:MM rolled <table>: <result>` line to the most-recent
+  session note (resolved by frontmatter `type: session`, sorted by `date:`
+  DESC). Toggle is OFF by default; flip it on for live game logging.
+- **Emit-on-error** — broken `.ipt` files don't vanish anymore. Failed
+  rolls produce a `[ROLL ERROR: <message>]` result that flows through the
+  same event bus as successes, so the session log and history capture
+  attempts that failed. Diagnostic feedback for free.
+- **Roll history** — every roll persisted to `_rolls/history.md` (markdown,
+  browsable directly in Obsidian — not opaque JSON). New "Open roll
+  history" command opens a sidebar view with newest-first list, per-row
+  reroll button (↻), and Mark used / Unmark buttons.
+- **Used / Unused tracker** — mark a rolled result as used so future rolls
+  with `excludeUsed: true` skip it (re-rolls up to 20 times). State stored
+  vault-globally at `_rolls/used.md`. Auto-mark on roll-into-property
+  (toggle-gated, default ON); manual mark/unmark from the history view.
+
+## Features (upstream)
 
 - **`randomness` codeblocks** — embed a generator directly in a note. Rolls
   every render; supports the full IPP3 grammar including weighted tables,
@@ -142,6 +177,48 @@ relative to the **Generator root** configured in Settings → Randomness.
   otherwise) and writes all locks in one atomic save.
 - **Reroll all `rdm:` in current note** — strips every lock and clears
   cached previews. The next render shows fresh previews everywhere.
+- **Roll table into frontmatter property…** *(fork)* — pick any vault table,
+  type a property key, Enter. Result lands in the active note's frontmatter.
+  Out-of-scope tables auto-add a `Use:` line.
+- **Quick roll table…** *(fork)* — fuzzy-pick any vault table, get a result
+  via Notice + clipboard. No note mutation.
+- **Open roll history** *(fork)* — opens the history sidebar view with
+  reroll + mark-used buttons per row.
+
+## Public JS API
+
+Stable surface at `app.plugins.plugins["randomness-frontmatter"].api`.
+All methods return `Promise<RollResult>` (or its variants); errors emit
+through `onRoll` before re-throwing so subscribers see every attempt.
+
+```ts
+interface RandomnessFrontmatterAPI {
+    version: string;
+    roll(tableName: string, opts?: RollOptions): Promise<RollResult>;
+    rollExpression(rawExpr: string, opts?: RollOptions): Promise<RollResult>;
+    rollUnscoped(tableName: string, filePath: string): Promise<RollResult>;
+    rollIntoProperty(key: string, tableName: string, opts?: RollOptions): Promise<RollResult>;
+    tables(callerNotePath?: string): Promise<string[]>;
+    tablesWithSources(callerNotePath?: string): Promise<TableSource[]>;
+    onRoll(callback: (result: RollResult) => void): () => void;  // returns unsubscribe
+}
+
+interface RollOptions {
+    callerNotePath?: string;
+    excludeUsed?: boolean;  // retry up to 20 times to skip used results
+}
+
+interface RollResult {
+    result: string;
+    table: string;
+    expression: string;
+    source: string | undefined;  // caller notePath at time of roll
+    timestamp: string;            // ISO 8601
+    rollId: string;               // UUID v4
+    error?: string;               // set when this attempt threw inside the evaluator
+    allUsed?: boolean;            // set when excludeUsed exhausted the table
+}
+```
 
 ## Settings
 
@@ -154,6 +231,30 @@ relative to the **Generator root** configured in Settings → Randomness.
 - **Stable codeblock seeds** — when on, codeblocks render the same result
   across reloads (until you reroll). Useful for keeping a generator
   "settled" without committing to a specific lock. Off by default.
+
+### Session log auto-append *(fork)*
+
+- **Auto-append rolls to active session note** — toggle (default OFF).
+  When on, every successful roll appends a log line to the resolved
+  session note.
+- **Session frontmatter key / value** — which frontmatter key/value
+  combination identifies a session note. Defaults: `type` / `session`.
+  Most-recent `date:` field wins among matches; ties broken by mtime.
+
+### Roll history *(fork)*
+
+- **Record roll history** — toggle (default ON). Persists every roll to
+  `_rolls/history.md` (markdown, browsable in Obsidian directly).
+- **History cap** — maximum entries to keep (default 50; clamped 10–500).
+  FIFO eviction once full.
+
+### Used / Unused state *(fork)*
+
+- **Auto-mark roll-into-property results as used** — toggle (default ON).
+  Result is added to the used set after the frontmatter write lands.
+- **Exclude used when rolling into property** — toggle (default OFF).
+  When on, the resolver re-rolls (up to 20 attempts) to find an unused
+  result before committing to frontmatter.
 
 ## Where inline `rdm:` calls work
 
