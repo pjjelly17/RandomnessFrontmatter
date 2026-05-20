@@ -1,9 +1,10 @@
 {
-  "id": "randomness",
-  "name": "Randomness",
-  "version": "0.4.4",
+  "id": "randomness-frontmatter",
+  "name": "Randomness Frontmatter",
+  "version": "0.1.0",
   "minAppVersion": "1.4.0",
-  "description": "Random table generator for TTRPG and creative writing. Compatible with the Inspiration Pad Pro 3 (IPP3) syntax. Roll inline, lock results, browse generators in a sidebar.",
-  "author": "Josh",
+  "description": "Fork of Randomness (IPP3-compatible) adding frontmatter property writes, a public JS API, roll history, a quick-roll palette, session-log auto-append, and used/unused state. DM-cockpit additions on top of the IPP3 engine.",
+  "author": "pjjelly17",
+  "authorUrl": "https://github.com/pjjelly17/RandomnessFrontmatter",
   "isDesktopOnly": false
 }

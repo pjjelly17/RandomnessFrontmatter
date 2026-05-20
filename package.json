@@ -1,7 +1,7 @@
 {
-  "name": "randomness",
-  "version": "0.4.4",
-  "description": "IPP3-compatible random generator engine for Obsidian",
+  "name": "randomness-frontmatter",
+  "version": "0.1.0",
+  "description": "Fork of Randomness adding frontmatter writes, public JS API, roll history, palette, session-log auto-append, used/unused state.",
   "main": "main.js",
   "scripts": {
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
