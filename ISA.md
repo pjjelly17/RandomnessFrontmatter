@@ -85,7 +85,7 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - [x] ISC-17i: In-scope picks bypass injection entirely (branch at command line 218)
 - [x] ISC-17j: `bun run build` exit 0; tsc strict passes; 799 tests green; main.js 88974→91342 bytes
 
-**Behavioral verification pending PJ smoke test in NoStone5e — see Verification section.**
+**Behavior-verified by PJ in NoStone5e 2026-05-20 (commit `39553cd`). Out-of-scope pick → Use: line written → roll lands → frontmatter populated. All 10 Phase 1.5 ISCs live.**
 
 ### Phase 1 — Item 3: Quick-roll palette
 - [ ] ISC-18: Single command registered: `randomness-frontmatter:quick-roll`
