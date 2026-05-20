@@ -196,6 +196,28 @@ describe("appendRollToSessionNote", () => {
         );
     });
 
+    test("appends failure marker lines when the emitted roll result has error set", async () => {
+        const sessionFile = makeMarkdownFile("Sessions/a.md", 1000);
+        const caches = new Map<TFile, FileCacheLike>([
+            [sessionFile, { frontmatter: { type: "session", date: "2026-05-20" } }],
+        ]);
+        const { plugin, sourceByPath } = makePlugin({
+            settings: { sessionAutoAppend: true },
+            caches,
+            sources: { "Sessions/a.md": "Session body" },
+        });
+        const rollResult = makeRollResult({
+            result: "[ROLL ERROR: broken nested-table reference]",
+            error: "broken nested-table reference",
+        });
+
+        await appendRollToSessionNote(plugin as never, rollResult);
+
+        expect(sourceByPath.get("Sessions/a.md")).toContain(
+            "[ROLL ERROR: broken nested-table reference]"
+        );
+    });
+
     test("silently skips when no session note matches", async () => {
         const file = makeMarkdownFile("Notes/a.md", 1000);
         const caches = new Map<TFile, FileCacheLike>([

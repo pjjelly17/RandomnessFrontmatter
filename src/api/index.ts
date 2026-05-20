@@ -24,6 +24,7 @@ export interface RollOptions {
     promptValues?: Record<string, string>;
 }
 
+/** Result emitted for every roll attempt. Successful rolls omit `error`; failure emits set it and use `result` as the error marker text. */
 export interface RollResult {
     /** The final rendered text. */
     result: string;
@@ -33,6 +34,8 @@ export interface RollResult {
     expression: string;
     /** Source file the table was resolved from, if known. Left undefined in v0.1 because the engine does not expose the resolved .ipt path. */
     source?: string;
+    /** Present and set to the failure message ONLY when this result represents a roll attempt that threw inside the evaluator. Absent on successful rolls. */
+    error?: string;
     /** ISO 8601 timestamp of when the roll happened. */
     timestamp: string;
     /** Unique roll ID (crypto.randomUUID() or similar). Stable across the process; useful for history dedup. */
@@ -113,6 +116,26 @@ export function createApi(
         }
     };
 
+    const emitFailureResult = (
+        expression: string,
+        table: string,
+        error: unknown
+    ): RollResult => {
+        const message =
+            error instanceof Error ? error.message : String(error);
+        const result: RollResult = {
+            result: `[ROLL ERROR: ${message}]`,
+            table,
+            expression,
+            source: undefined,
+            error: message,
+            timestamp: new Date().toISOString(),
+            rollId: globalThis.crypto.randomUUID(),
+        };
+        emitRoll(result);
+        return result;
+    };
+
     const rollExpression = async (
         rawExpr: string,
         opts?: RollOptions
@@ -122,21 +145,26 @@ export function createApi(
             (opts as InternalRollOptions | undefined)?.[
                 REQUESTED_TABLE
             ] ?? rawExpr;
-        const resultText = await evaluateInlineExpression(
-            rawExpr,
-            notePath,
-            plugin
-        );
-        const result: RollResult = {
-            result: resultText,
-            table,
-            expression: rawExpr,
-            source: undefined,
-            timestamp: new Date().toISOString(),
-            rollId: globalThis.crypto.randomUUID(),
-        };
-        emitRoll(result);
-        return result;
+        try {
+            const resultText = await evaluateInlineExpression(
+                rawExpr,
+                notePath,
+                plugin
+            );
+            const result: RollResult = {
+                result: resultText,
+                table,
+                expression: rawExpr,
+                source: undefined,
+                timestamp: new Date().toISOString(),
+                rollId: globalThis.crypto.randomUUID(),
+            };
+            emitRoll(result);
+            return result;
+        } catch (error: unknown) {
+            emitFailureResult(rawExpr, table, error);
+            throw error;
+        }
     };
 
     const roll = async (
@@ -155,48 +183,62 @@ export function createApi(
         tableName: string,
         filePath: string
     ): Promise<RollResult> => {
+        const expression = `[@${tableName}]`;
         const file = plugin.app.vault.getAbstractFileByPath(filePath);
         if (!(file instanceof TFile)) {
-            throw new Error(
+            const error = new Error(
                 `Table file "${filePath}" does not exist in the vault`
             );
+            emitFailureResult(expression, tableName, error);
+            throw error;
         }
 
         let source: string;
         try {
             source = await plugin.app.vault.read(file);
         } catch (error: unknown) {
-            throw new Error(
+            const readError = new Error(
                 `Failed to read table file "${filePath}": ${errorMessage(error)}`
             );
+            emitFailureResult(expression, tableName, readError);
+            throw readError;
         }
 
-        let parsed;
+        let parsed: ReturnType<typeof parseGeneratorFile>;
         try {
             parsed = parseGeneratorFile(source);
         } catch (error: unknown) {
-            throw new Error(
+            const parseError = new Error(
                 `Failed to parse table file "${filePath}": ${errorMessage(error)}`
             );
+            emitFailureResult(expression, tableName, parseError);
+            throw parseError;
         }
 
         if (!parsed.tables.some((table) => table.name === tableName)) {
-            throw new Error(
+            const error = new Error(
                 `Table "${tableName}" was not found in "${filePath}"`
             );
+            emitFailureResult(expression, tableName, error);
+            throw error;
         }
 
-        const expression = `[@${tableName}]`;
         const syntheticSource = `\`\`\`randomness\nUse: ${filePath}\n\`\`\``;
         // Colon-prefixed sentinel marks this as synthetic context, not a
         // real vault path, while still carrying the imported file for logs.
         const syntheticNotePath = `__quick_roll__:${filePath}`;
-        const resultText = await evaluateInlineExpression(
-            expression,
-            syntheticNotePath,
-            plugin,
-            syntheticSource
-        );
+        let resultText: string;
+        try {
+            resultText = await evaluateInlineExpression(
+                expression,
+                syntheticNotePath,
+                plugin,
+                syntheticSource
+            );
+        } catch (error: unknown) {
+            emitFailureResult(expression, tableName, error);
+            throw error;
+        }
         const result: RollResult = {
             result: resultText,
             table: tableName,
