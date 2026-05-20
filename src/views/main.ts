@@ -33,9 +33,17 @@ import {
     openReferenceView,
 } from "./referenceView";
 import { TableAutocomplete } from "./tableAutocomplete";
+import { createApi, RandomnessFrontmatterAPI } from "../api";
+import { registerRollIntoPropertyCommand } from "./rollIntoPropertyCommand";
 
 export default class RandomnessPlugin extends Plugin {
     settings: RandomnessSettings = DEFAULT_SETTINGS;
+    /**
+     * Public JS API. Attached in onload(); accessible from other
+     * plugins / Templater / DataviewJS via:
+     *   app.plugins.plugins["randomness-frontmatter"].api
+     */
+    api!: RandomnessFrontmatterAPI;
     /**
      * Shared preview registry. Lives for the plugin's lifetime;
      * cleared per-note when a note's source changes underneath us.
@@ -50,6 +58,11 @@ export default class RandomnessPlugin extends Plugin {
 
     async onload(): Promise<void> {
         await this.loadSettings();
+
+        // Build the public API early so commands + future features
+        // can consume it. Attached as `plugin.api`; reachable from
+        // other plugins via app.plugins.plugins["randomness-frontmatter"].api
+        this.api = createApi(this);
 
         // Register the codeblock processor for ```randomness blocks.
         this.registerMarkdownCodeBlockProcessor(
@@ -103,6 +116,9 @@ export default class RandomnessPlugin extends Plugin {
             name: "Open reference",
             callback: () => void openReferenceView(this),
         });
+
+        // Phase 1 item #2 — roll into frontmatter property.
+        registerRollIntoPropertyCommand(this);
     }
 
     async onunload(): Promise<void> {
