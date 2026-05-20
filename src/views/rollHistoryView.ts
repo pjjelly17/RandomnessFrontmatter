@@ -9,6 +9,12 @@ import {
     loadRollHistory,
     waitForRollHistoryWrites,
 } from "./rollHistoryService";
+import {
+    loadUsed,
+    markUsed,
+    unmarkUsed,
+    usedKeyFor,
+} from "./usedTracker";
 
 export const VIEW_TYPE_ROLL_HISTORY = "randomness-roll-history-view";
 const SYNTHETIC_QUICK_ROLL_PREFIX = "__quick_roll__:";
@@ -75,6 +81,8 @@ export class RollHistoryView extends ItemView {
 
         clearElement(this.listEl);
         const entries = await loadRollHistory(this.plugin);
+        const usedEntries = await loadUsed(this.plugin);
+        const usedSet = new Set(usedEntries.map((entry) => entry.key));
         const newestFirst = [...entries].reverse();
 
         if (newestFirst.length === 0) {
@@ -86,15 +94,24 @@ export class RollHistoryView extends ItemView {
         }
 
         for (const entry of newestFirst) {
-            this.listEl.appendChild(this.buildRow(entry));
+            this.listEl.appendChild(this.buildRow(entry, usedSet));
         }
     }
 
-    private buildRow(entry: HistoryEntry): HTMLElement {
+    private buildRow(
+        entry: HistoryEntry,
+        usedSet: Set<string>
+    ): HTMLElement {
         const row = document.createElement("div");
         row.className = "randomness-history-row";
         if (entry.error) {
             row.classList.add("randomness-history-row-error");
+        }
+        const isUsedFlag =
+            !entry.error &&
+            usedSet.has(usedKeyFor(entry.table, entry.result));
+        if (isUsedFlag) {
+            row.classList.add("randomness-history-row-used");
         }
 
         const main = document.createElement("div");
@@ -111,10 +128,34 @@ export class RollHistoryView extends ItemView {
         result.textContent = entry.result;
         main.appendChild(result);
 
+        if (isUsedFlag) {
+            const usedBadge = document.createElement("span");
+            usedBadge.className = "randomness-history-used-badge";
+            usedBadge.textContent = "Used";
+            main.appendChild(usedBadge);
+        }
+
         const meta = document.createElement("div");
         meta.className = "randomness-history-row-meta";
         meta.textContent = `${formatHistoryTimestamp(entry.timestamp)} · ${basenameForDisplay(entry.sourcePath)}`;
         main.appendChild(meta);
+
+        const actions = document.createElement("div");
+        actions.className = "randomness-history-row-actions";
+        row.appendChild(actions);
+
+        if (!entry.error) {
+            const usedButton = document.createElement("button");
+            usedButton.className = "randomness-history-row-reroll";
+            usedButton.type = "button";
+            usedButton.textContent = isUsedFlag
+                ? "↶ Unmark"
+                : "✓ Mark used";
+            usedButton.addEventListener("click", () => {
+                void this.toggleUsed(entry, isUsedFlag, usedButton);
+            });
+            actions.appendChild(usedButton);
+        }
 
         const rerollButton = document.createElement("button");
         rerollButton.className = "randomness-history-row-reroll";
@@ -124,9 +165,31 @@ export class RollHistoryView extends ItemView {
         rerollButton.addEventListener("click", () => {
             void this.rerollEntry(entry, rerollButton);
         });
-        row.appendChild(rerollButton);
+        actions.appendChild(rerollButton);
 
         return row;
+    }
+
+    private async toggleUsed(
+        entry: HistoryEntry,
+        isUsedFlag: boolean,
+        button: HTMLButtonElement
+    ): Promise<void> {
+        button.disabled = true;
+        try {
+            if (isUsedFlag) {
+                await unmarkUsed(this.plugin, entry.table, entry.result);
+            } else {
+                await markUsed(this.plugin, entry.table, entry.result);
+            }
+            await this.renderHistory();
+        } catch (error: unknown) {
+            const message =
+                error instanceof Error ? error.message : String(error);
+            new Notice(`Used-state update failed: ${message}`);
+        } finally {
+            button.disabled = false;
+        }
     }
 
     private async rerollEntry(

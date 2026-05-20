@@ -153,6 +153,8 @@ describe("settings: defaults", () => {
             sessionTypeValue: "session",
             historyEnabled: true,
             historyMaxEntries: 50,
+            autoMarkUsedOnRollIntoProperty: true,
+            excludeUsedInRollIntoProperty: false,
         });
     });
 });
@@ -180,6 +182,8 @@ describe("settings: load merge", () => {
             sessionTypeValue: "play-session",
             historyEnabled: false,
             historyMaxEntries: 125,
+            autoMarkUsedOnRollIntoProperty: true,
+            excludeUsedInRollIntoProperty: false,
         };
         await p.saveSettings();
         await p.loadSettings();
@@ -194,6 +198,8 @@ describe("settings: load merge", () => {
             sessionTypeValue: "play-session",
             historyEnabled: false,
             historyMaxEntries: 125,
+            autoMarkUsedOnRollIntoProperty: true,
+            excludeUsedInRollIntoProperty: false,
         });
     });
 

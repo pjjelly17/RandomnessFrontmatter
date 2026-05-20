@@ -11,9 +11,11 @@ import { vaultFileSource } from "../views/vaultFileSource";
 import { discoverGenerators } from "../views/browserView";
 import { collectTablesFromBundle } from "../views/tableAutocomplete";
 import type RandomnessPlugin from "../views/main";
+import { isUsed, markUsed } from "../views/usedTracker";
 
 const API_VERSION = "0.1.0" as const;
 const REQUESTED_TABLE = Symbol("requestedTable");
+const EXCLUDE_USED_MAX_ATTEMPTS = 20;
 
 export interface RollOptions {
     /** Path of the note initiating the roll. Defaults to the active file's path. Resolves Use: paths and frontmatter context. */
@@ -22,6 +24,12 @@ export interface RollOptions {
     seed?: number;
     /** Override prompt values for Prompt: directives. Accepted for v0.1 compatibility but currently a no-op because evaluateInlineExpression does not accept prompt overrides. */
     promptValues?: Record<string, string>;
+    /**
+     * When true, retry the underlying roll up to 20 times to skip results
+     * already marked used for the same table. If all 20 attempts are used,
+     * the last attempt is returned with `allUsed: true`.
+     */
+    excludeUsed?: boolean;
 }
 
 /** Result emitted for every roll attempt. Successful rolls omit `error`; failure emits set it and use `result` as the error marker text. */
@@ -40,6 +48,11 @@ export interface RollResult {
     timestamp: string;
     /** Unique roll ID (crypto.randomUUID() or similar). Stable across the process; useful for history dedup. */
     rollId: string;
+    /**
+     * Present and `true` only when `excludeUsed` was set and the 20-attempt
+     * cap was hit without finding an unused result.
+     */
+    allUsed?: boolean;
 }
 
 export type RollEventListener = (result: RollResult) => void;
@@ -72,7 +85,8 @@ export interface RandomnessFrontmatterAPI {
      */
     rollUnscoped(
         tableName: string,
-        filePath: string
+        filePath: string,
+        opts?: RollOptions
     ): Promise<RollResult>;
     rollExpression(rawExpr: string, opts?: RollOptions): Promise<RollResult>;
     rollIntoProperty(
@@ -137,6 +151,31 @@ export function createApi(
         return result;
     };
 
+    const evaluateWithUsedRetry = async (
+        table: string,
+        excludeUsed: boolean,
+        evaluate: () => Promise<string>
+    ): Promise<{ resultText: string; allUsed?: true }> => {
+        let lastResultText = "";
+        for (let attempt = 1; attempt <= EXCLUDE_USED_MAX_ATTEMPTS; attempt++) {
+            const resultText = await evaluate();
+            lastResultText = resultText;
+            if (!excludeUsed) {
+                return { resultText };
+            }
+
+            const alreadyUsed = await isUsed(plugin, table, resultText);
+            if (!alreadyUsed) {
+                return { resultText };
+            }
+        }
+
+        return {
+            resultText: lastResultText,
+            allUsed: true,
+        };
+    };
+
     const rollExpression = async (
         rawExpr: string,
         opts?: RollOptions
@@ -147,11 +186,17 @@ export function createApi(
                 REQUESTED_TABLE
             ] ?? rawExpr;
         try {
-            const resultText = await evaluateInlineExpression(
-                rawExpr,
-                notePath,
-                plugin
+            const evaluated = await evaluateWithUsedRetry(
+                table,
+                opts?.excludeUsed === true,
+                () =>
+                    evaluateInlineExpression(
+                        rawExpr,
+                        notePath,
+                        plugin
+                    )
             );
+            const resultText = evaluated.resultText;
             const result: RollResult = {
                 result: resultText,
                 table,
@@ -159,6 +204,7 @@ export function createApi(
                 source: notePath,
                 timestamp: new Date().toISOString(),
                 rollId: globalThis.crypto.randomUUID(),
+                ...(evaluated.allUsed ? { allUsed: true as const } : {}),
             };
             emitRoll(result);
             return result;
@@ -182,7 +228,8 @@ export function createApi(
 
     const rollUnscoped = async (
         tableName: string,
-        filePath: string
+        filePath: string,
+        opts?: RollOptions
     ): Promise<RollResult> => {
         const expression = `[@${tableName}]`;
         const file = plugin.app.vault.getAbstractFileByPath(filePath);
@@ -248,13 +295,18 @@ export function createApi(
         const syntheticSource = `\`\`\`randomness\nUse: ${filePath}\n\`\`\``;
         // Colon-prefixed sentinel marks this as synthetic context, not a
         // real vault path, while still carrying the imported file for logs.
-        let resultText: string;
+        let evaluated: { resultText: string; allUsed?: true };
         try {
-            resultText = await evaluateInlineExpression(
-                expression,
-                syntheticNotePath,
-                plugin,
-                syntheticSource
+            evaluated = await evaluateWithUsedRetry(
+                tableName,
+                opts?.excludeUsed === true,
+                () =>
+                    evaluateInlineExpression(
+                        expression,
+                        syntheticNotePath,
+                        plugin,
+                        syntheticSource
+                    )
             );
         } catch (error: unknown) {
             emitFailureResult(
@@ -266,12 +318,13 @@ export function createApi(
             throw error;
         }
         const result: RollResult = {
-            result: resultText,
+            result: evaluated.resultText,
             table: tableName,
             expression,
             source: syntheticNotePath,
             timestamp: new Date().toISOString(),
             rollId: globalThis.crypto.randomUUID(),
+            ...(evaluated.allUsed ? { allUsed: true as const } : {}),
         };
         emitRoll(result);
         return result;
@@ -296,6 +349,16 @@ export function createApi(
             await plugin.app.fileManager.processFrontMatter(file, (fm) => {
                 fm[key] = result.result;
             });
+            if (plugin.settings.autoMarkUsedOnRollIntoProperty !== false) {
+                try {
+                    await markUsed(plugin, result.table, result.result);
+                } catch (error: unknown) {
+                    console.warn(
+                        "randomness-frontmatter: auto-mark used failed",
+                        error
+                    );
+                }
+            }
             return result;
         },
         // Use a direct vault scan here so the API stays decoupled from the editor autocomplete cache.

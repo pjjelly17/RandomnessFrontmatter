@@ -143,6 +143,12 @@
     flex: 1;
 }
 
+.randomness-history-row-actions {
+    display: flex;
+    gap: 0.4em;
+    flex-shrink: 0;
+}
+
 .randomness-history-row-table {
     color: var(--color-accent);
     font-weight: 600;
@@ -151,6 +157,26 @@
 
 .randomness-history-row-result {
     word-break: break-word;
+}
+
+.randomness-history-row-used {
+    background: var(--background-modifier-hover);
+    opacity: 0.8;
+}
+
+.randomness-history-row-used .randomness-history-row-result {
+    text-decoration: line-through;
+}
+
+.randomness-history-used-badge {
+    display: inline-block;
+    margin-top: 0.35em;
+    padding: 0.1em 0.45em;
+    border-radius: 999px;
+    background: var(--background-modifier-success);
+    color: var(--text-on-accent);
+    font-size: 0.75em;
+    font-weight: 600;
 }
 
 .randomness-history-row-meta {

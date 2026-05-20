@@ -230,8 +230,18 @@ export function registerRollIntoPropertyCommand(
                             const rollResult =
                                 await plugin.api.rollIntoProperty(
                                     key,
-                                    picked.name
+                                    picked.name,
+                                    {
+                                        excludeUsed:
+                                            plugin.settings.excludeUsedInRollIntoProperty ??
+                                            false,
+                                    }
                                 );
+                            if (rollResult.allUsed) {
+                                new Notice(
+                                    "Randomness Frontmatter: all entries used; reusing last roll."
+                                );
+                            }
                             new Notice(
                                 `Rolled [@${picked.name}] → ${key}: ${rollResult.result}`
                             );

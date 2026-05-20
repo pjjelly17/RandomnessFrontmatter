@@ -60,6 +60,10 @@ export interface RandomnessSettings {
     historyEnabled: boolean;
     /** Max history entries to keep — FIFO eviction at this cap. Default 50. */
     historyMaxEntries: number;
+    /** Auto-mark a result as used when committed via roll-into-property. Default ON. */
+    autoMarkUsedOnRollIntoProperty: boolean;
+    /** Exclude used results when the roll-into-property command rolls. Default OFF (opt-in). */
+    excludeUsedInRollIntoProperty: boolean;
     /**
      * Paths (folders and files) the user has expanded in the generator
      * browser pane. Persisted so the tree remembers its shape across
@@ -96,6 +100,8 @@ const DEFAULT_SESSION_TYPE_KEY = "type";
 const DEFAULT_SESSION_TYPE_VALUE = "session";
 const DEFAULT_HISTORY_ENABLED = true;
 const DEFAULT_HISTORY_MAX_ENTRIES = 50;
+const DEFAULT_AUTO_MARK_USED_ON_ROLL_INTO_PROPERTY = true;
+const DEFAULT_EXCLUDE_USED_IN_ROLL_INTO_PROPERTY = false;
 
 export const DEFAULT_SETTINGS: RandomnessSettings = {
     generatorRoot: "",
@@ -111,6 +117,10 @@ export const DEFAULT_SETTINGS: RandomnessSettings = {
     sessionTypeValue: DEFAULT_SESSION_TYPE_VALUE,
     historyEnabled: DEFAULT_HISTORY_ENABLED,
     historyMaxEntries: DEFAULT_HISTORY_MAX_ENTRIES,
+    autoMarkUsedOnRollIntoProperty:
+        DEFAULT_AUTO_MARK_USED_ON_ROLL_INTO_PROPERTY,
+    excludeUsedInRollIntoProperty:
+        DEFAULT_EXCLUDE_USED_IN_ROLL_INTO_PROPERTY,
 };
 
 function clampHistoryMaxEntries(value: unknown): number {
@@ -302,7 +312,7 @@ export class RandomnessSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Record roll history")
             .setDesc(
-                "Record every roll into _rolls/history.jsonl in the vault. Disable for a no-trace mode."
+                "Record every roll into _rolls/history.md in the vault. Disable for a no-trace mode."
             )
             .addToggle((toggle) =>
                 toggle
@@ -331,6 +341,47 @@ export class RandomnessSettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.historyMaxEntries =
                             clampHistoryMaxEntries(value);
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        const usedHeading = document.createElement("h3");
+        usedHeading.textContent = "Used / Unused state";
+        containerEl.appendChild(usedHeading);
+
+        new Setting(containerEl)
+            .setName("Auto-mark rolls committed to properties")
+            .setDesc(
+                "When you roll a table into a frontmatter property, automatically add that result to the used set."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings
+                            .autoMarkUsedOnRollIntoProperty ??
+                            DEFAULT_SETTINGS.autoMarkUsedOnRollIntoProperty
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.autoMarkUsedOnRollIntoProperty =
+                            value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Exclude used on roll-into-property")
+            .setDesc(
+                "When rolling into a frontmatter property, skip results that are already in the used set (re-rolls up to 20 times). When all results are used, falls back to the last attempt."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings.excludeUsedInRollIntoProperty ??
+                            DEFAULT_SETTINGS.excludeUsedInRollIntoProperty
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.excludeUsedInRollIntoProperty =
+                            value;
                         await this.plugin.saveSettings();
                     })
             );

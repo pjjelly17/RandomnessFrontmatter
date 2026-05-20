@@ -118,11 +118,20 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 
 **Behavior-verification pending PJ smoke test.**
 
-### Phase 1 — Item 6: Used/Unused state
-- [ ] ISC-33: Side-state file per `.ipt`: `<table>.used.json` map of rollId → used:true
-- [ ] ISC-34: "Mark used" action available from history view + roll-into-property command
-- [ ] ISC-35: API option `excludeUsed: true` filters out used results from the roll source
-- [ ] ISC-36: Per-table opt-in via `#Track: used` directive in the `.ipt` file (does not break existing files)
+### Phase 1 — Item 6: Used/Unused state (vault-global variant)
+- [x] ISC-33 modified: Single vault-global state file `_rolls/used.md` (markdown, mirrors history format). Per-`.ipt` scope dropped — PJ confirmed multi-campaign single-vault setup makes per-file scope wrong; vault-global is the right granularity.
+- [x] ISC-34: Mark/unmark button per row in RollHistoryView (✓ Mark used / ↶ Unmark); auto-mark on rollIntoProperty success when `autoMarkUsedOnRollIntoProperty` setting is ON (default ON)
+- [x] ISC-35: `excludeUsed?: boolean` opt on RollOptions; `rollExpression` + `rollUnscoped` retry up to 20 attempts to find an unused result; fallback flags `allUsed: true` on RollResult so consumers can Notice
+- [x] ISC-36 dropped: `#Track: used` directive deliberately out-of-scope. PJ controls dedup entirely via settings + API opt. ISC closed as unbuilt-by-design.
+- [x] +Settings: `autoMarkUsedOnRollIntoProperty` (toggle, default ON), `excludeUsedInRollIntoProperty` (toggle, default OFF) under new "Used / Unused state" section
+- [x] +Tracker: `usedTracker.ts` exports `usedKeyFor` (case-insensitive `${table}|${result}` key), `loadUsed`, `isUsed`, `markUsed`, `unmarkUsed`; per-plugin WeakMap write queue for race safety
+- [x] Build green; 816 tests pass (+5 from baseline 811)
+
+**Behavior-verification pending PJ smoke test.**
+
+---
+
+**Phase 1 — code-complete 2026-05-20.** All 6 items shipped. Behavior-verification of #6 pending PJ smoke test; items #1–#5 already behavior-verified live in NoStone5e.
 
 ### Cross-cutting / Anti-criteria
 - [ ] ISC-37: Anti: existing `rdm:[@X]` inline syntax still works identically to upstream
