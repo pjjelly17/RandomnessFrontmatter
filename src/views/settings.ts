@@ -47,6 +47,15 @@ export interface RandomnessSettings {
      * shuffle every time I scroll past it".
      */
     stableCodeblockSeeds: boolean;
+    /** When ON, every successful API roll appends a log line to the
+     *  current session note (resolved by sessionTypeKey/sessionTypeValue).
+     *  Default OFF — opt-in feature; silent no-op when no session note
+     *  matches. */
+    sessionAutoAppend: boolean;
+    /** Frontmatter KEY that identifies a session note (e.g. "type"). */
+    sessionTypeKey: string;
+    /** Frontmatter VALUE that identifies a session note (e.g. "session"). */
+    sessionTypeValue: string;
     /**
      * Paths (folders and files) the user has expanded in the generator
      * browser pane. Persisted so the tree remembers its shape across
@@ -78,12 +87,22 @@ export interface RandomnessSettings {
     pinnedTables: string[];
 }
 
+const DEFAULT_SESSION_AUTO_APPEND = false;
+const DEFAULT_SESSION_TYPE_KEY = "type";
+const DEFAULT_SESSION_TYPE_VALUE = "session";
+
 export const DEFAULT_SETTINGS: RandomnessSettings = {
     generatorRoot: "",
     defaultFormatting: "html",
     stableCodeblockSeeds: false,
     browserExpandedPaths: [],
     pinnedTables: [],
+    // Session log auto-append fields. Plain enumerable properties so
+    // loadSettings()'s Object.assign({}, DEFAULT_SETTINGS, stored) merge
+    // includes them and persists user changes round-trip.
+    sessionAutoAppend: DEFAULT_SESSION_AUTO_APPEND,
+    sessionTypeKey: DEFAULT_SESSION_TYPE_KEY,
+    sessionTypeValue: DEFAULT_SESSION_TYPE_VALUE,
 };
 
 /**
@@ -195,6 +214,66 @@ export class RandomnessSettingsTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.stableCodeblockSeeds)
                     .onChange(async (value) => {
                         this.plugin.settings.stableCodeblockSeeds = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        // Plain DOM heading rather than `containerEl.createEl(...)` so the
+        // test-suite's jsdom HTMLElement (which lacks Obsidian's createEl
+        // augmentation) renders the settings tab without throwing.
+        const sessionHeading = document.createElement("h3");
+        sessionHeading.textContent = "Session log auto-append";
+        containerEl.appendChild(sessionHeading);
+
+        new Setting(containerEl)
+            .setName("Auto-append rolls to active session note")
+            .setDesc(
+                "When on, every roll is appended as a one-line entry to the " +
+                    "most-recent session note. Looks for notes whose " +
+                    "frontmatter has the key/value below."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings.sessionAutoAppend ??
+                            DEFAULT_SETTINGS.sessionAutoAppend
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.sessionAutoAppend = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Session note frontmatter key")
+            .setDesc("Frontmatter key that identifies a session note.")
+            .addText((text) =>
+                text
+                    .setPlaceholder(DEFAULT_SESSION_TYPE_KEY)
+                    .setValue(
+                        this.plugin.settings.sessionTypeKey ??
+                            DEFAULT_SETTINGS.sessionTypeKey
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.sessionTypeKey = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Session note frontmatter value")
+            .setDesc(
+                "Frontmatter value at that key that marks a session note."
+            )
+            .addText((text) =>
+                text
+                    .setPlaceholder(DEFAULT_SESSION_TYPE_VALUE)
+                    .setValue(
+                        this.plugin.settings.sessionTypeValue ??
+                            DEFAULT_SETTINGS.sessionTypeValue
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.sessionTypeValue = value.trim();
                         await this.plugin.saveSettings();
                     })
             );

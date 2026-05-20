@@ -96,11 +96,15 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 **Behavior-verified by PJ 2026-05-20 — quick-roll fires + clipboard populated (commit `6c266dd`).**
 
 ### Phase 1 — Item 4: Session-log auto-append
-- [ ] ISC-22: Setting toggle: "Auto-append rolls to active session note"
-- [ ] ISC-23: Setting: "Active session note frontmatter selector" (default: `type: session` + most-recent `date:`)
-- [ ] ISC-24: When ON, every API roll appends `- HH:MM rolled <table>: <result>` to the resolved session note
-- [ ] ISC-25: Multiple session notes case: most recent wins, ties broken by mtime
-- [ ] ISC-26: No-session-note case: silently skip (no notice spam)
+- [x] ISC-22: `sessionAutoAppend` toggle in settings (default OFF); UI heading "Session log auto-append" in RandomnessSettingsTab
+- [x] ISC-23: `sessionTypeKey` + `sessionTypeValue` text settings (defaults `type` / `session`)
+- [x] ISC-24: `appendRollToSessionNote` registered via `api.onRoll` in main.ts L74-75; writes `- HH:MM rolled <table>: <result>` via vault.modify
+- [x] ISC-25: `resolveSessionNote` sorts by frontmatter `date:` (parsed via `new Date()`) DESC then `file.stat.mtime` DESC; missing date falls back to mtime
+- [x] ISC-26: Bail-fast on `!sessionAutoAppend`; `resolveSessionNote` returns null for empty selector / no match → silent; vault errors logged to console.warn only
+- [x] +Bonus: WeakMap-keyed append queue in sessionLogAppender — serialises back-to-back rolls so fast-fire sessions can't lose entries via read-modify-write race (Forge addition; +7 unit tests)
+- [x] Build green (`bun run build` exit 0); 806 tests pass (+7 from baseline 799)
+
+**Behavior-verification pending PJ smoke test.**
 
 ### Phase 1 — Item 5: Roll history
 - [ ] ISC-27: History persisted to `_rolls/history.jsonl` in vault (one JSON object per line)

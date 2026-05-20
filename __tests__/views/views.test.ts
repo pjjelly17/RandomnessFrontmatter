@@ -148,6 +148,9 @@ describe("settings: defaults", () => {
             stableCodeblockSeeds: false,
             browserExpandedPaths: [],
             pinnedTables: [],
+            sessionAutoAppend: false,
+            sessionTypeKey: "type",
+            sessionTypeValue: "session",
         });
     });
 });
@@ -170,6 +173,9 @@ describe("settings: load merge", () => {
             stableCodeblockSeeds: true,
             browserExpandedPaths: ["Generators", "Generators/names.ipt"],
             pinnedTables: ["Generators/names.ipt::FirstName"],
+            sessionAutoAppend: true,
+            sessionTypeKey: "kind",
+            sessionTypeValue: "play-session",
         };
         await p.saveSettings();
         await p.loadSettings();
@@ -179,6 +185,9 @@ describe("settings: load merge", () => {
             stableCodeblockSeeds: true,
             browserExpandedPaths: ["Generators", "Generators/names.ipt"],
             pinnedTables: ["Generators/names.ipt::FirstName"],
+            sessionAutoAppend: true,
+            sessionTypeKey: "kind",
+            sessionTypeValue: "play-session",
         });
     });
 

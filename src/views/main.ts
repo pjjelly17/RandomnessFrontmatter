@@ -36,6 +36,7 @@ import { TableAutocomplete } from "./tableAutocomplete";
 import { createApi, RandomnessFrontmatterAPI } from "../api";
 import { registerRollIntoPropertyCommand } from "./rollIntoPropertyCommand";
 import { registerQuickRollCommand } from "./quickRollCommand";
+import { appendRollToSessionNote } from "./sessionLogAppender";
 
 export default class RandomnessPlugin extends Plugin {
     settings: RandomnessSettings = DEFAULT_SETTINGS;
@@ -64,6 +65,16 @@ export default class RandomnessPlugin extends Plugin {
         // can consume it. Attached as `plugin.api`; reachable from
         // other plugins via app.plugins.plugins["randomness-frontmatter"].api
         this.api = createApi(this);
+
+        // Session log auto-append: every roll fires a side-effect that
+        // appends a line to the current session note (if any). The listener
+        // itself is cheap — the appender bails immediately when the feature
+        // toggle is off (the common case). this.register() ensures the
+        // unsubscribe fires on plugin disable.
+        const unsubscribeRollLog = this.api.onRoll((result) => {
+            void appendRollToSessionNote(this, result);
+        });
+        this.register(unsubscribeRollLog);
 
         // Register the codeblock processor for ```randomness blocks.
         this.registerMarkdownCodeBlockProcessor(
