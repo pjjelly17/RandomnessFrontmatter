@@ -25,7 +25,6 @@
 
 import {
     App,
-    MarkdownView,
     Modal,
     Notice,
     SuggestModal,
@@ -33,7 +32,7 @@ import {
 } from "obsidian";
 import type RandomnessPlugin from "./main";
 import type { TableSource } from "../api";
-import { ensureUseInScope, ensureUseInSource } from "./useInjection";
+import { ensureUseInSource } from "./useInjection";
 
 class TableSuggestModal extends SuggestModal<TableSource> {
     constructor(
@@ -138,12 +137,18 @@ class PropertyKeyModal extends Modal {
 }
 
 /**
- * Inject `Use: <filePath>` into the given file. Preferred path is
- * through the active MarkdownView's editor (single undo group, so
- * Ctrl-Z reverts the import in one step); falls back to
- * vault.modify when no such editor is attached to the active file
- * — e.g. the user invoked the command while a non-markdown view
- * was focused, or the file is open in preview-only mode.
+ * Inject `Use: <filePath>` into the given file via vault.modify.
+ *
+ * We deliberately bypass the editor (editor.replaceRange) because
+ * the subsequent roll uses the resolver, which reads file content
+ * through vault.read. An editor-only write leaves the on-disk
+ * source stale until Obsidian's debounced save catches up — racing
+ * our roll and making the freshly-imported table unresolvable.
+ * vault.modify writes synchronously to disk AND propagates back
+ * into the editor view, so the user sees the same final state
+ * either way. We give up tight undo-grouping (Ctrl-Z reverts the
+ * Use: write alone, not also the frontmatter write) in exchange
+ * for correctness.
  *
  * Returns the number of source lines added (0 if the Use: line
  * was already there).
@@ -153,12 +158,6 @@ async function injectUseLine(
     file: TFile,
     filePath: string
 ): Promise<number> {
-    const view = plugin.app.workspace.getActiveViewOfType(MarkdownView);
-    if (view && view.file && view.file.path === file.path) {
-        return ensureUseInScope(view.editor, filePath);
-    }
-    // Source-string fallback. Same three-branch behaviour as the
-    // editor variant, just operating on the file's raw text.
     const source = await plugin.app.vault.read(file);
     const { newSource, linesAdded } = ensureUseInSource(
         source,
