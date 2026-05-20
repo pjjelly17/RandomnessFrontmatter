@@ -151,6 +151,8 @@ describe("settings: defaults", () => {
             sessionAutoAppend: false,
             sessionTypeKey: "type",
             sessionTypeValue: "session",
+            historyEnabled: true,
+            historyMaxEntries: 50,
         });
     });
 });
@@ -176,6 +178,8 @@ describe("settings: load merge", () => {
             sessionAutoAppend: true,
             sessionTypeKey: "kind",
             sessionTypeValue: "play-session",
+            historyEnabled: false,
+            historyMaxEntries: 125,
         };
         await p.saveSettings();
         await p.loadSettings();
@@ -188,6 +192,8 @@ describe("settings: load merge", () => {
             sessionAutoAppend: true,
             sessionTypeKey: "kind",
             sessionTypeValue: "play-session",
+            historyEnabled: false,
+            historyMaxEntries: 125,
         });
     });
 

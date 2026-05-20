@@ -94,6 +94,92 @@
     white-space: pre-wrap;
 }
 
+/* Roll history */
+
+.randomness-history {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0.75em;
+    gap: 0.5em;
+}
+
+.randomness-history-header h3 {
+    margin: 0;
+    font-size: 1em;
+}
+
+.randomness-history-description,
+.randomness-history-empty {
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.randomness-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    overflow-y: auto;
+}
+
+.randomness-history-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75em;
+    padding: 0.6em 0.7em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    background: var(--background-secondary);
+}
+
+.randomness-history-row-error {
+    border-color: var(--text-error);
+    background: var(--background-modifier-error);
+}
+
+.randomness-history-row-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.randomness-history-row-table {
+    color: var(--color-accent);
+    font-weight: 600;
+    margin-bottom: 0.2em;
+}
+
+.randomness-history-row-result {
+    word-break: break-word;
+}
+
+.randomness-history-row-meta {
+    margin-top: 0.3em;
+    color: var(--text-muted);
+    font-size: 0.85em;
+}
+
+.randomness-history-row-reroll {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 1em;
+    line-height: 1;
+    padding: 0.35em 0.5em;
+    flex-shrink: 0;
+}
+
+.randomness-history-row-reroll:hover:not(:disabled) {
+    background: var(--background-modifier-hover);
+}
+
+.randomness-history-row-reroll:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
 /* Prompt controls */
 
 .randomness-prompts {

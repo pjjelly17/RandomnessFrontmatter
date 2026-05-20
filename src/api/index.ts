@@ -119,7 +119,8 @@ export function createApi(
     const emitFailureResult = (
         expression: string,
         table: string,
-        error: unknown
+        error: unknown,
+        sourcePath?: string
     ): RollResult => {
         const message =
             error instanceof Error ? error.message : String(error);
@@ -127,7 +128,7 @@ export function createApi(
             result: `[ROLL ERROR: ${message}]`,
             table,
             expression,
-            source: undefined,
+            source: sourcePath ?? "",
             error: message,
             timestamp: new Date().toISOString(),
             rollId: globalThis.crypto.randomUUID(),
@@ -155,14 +156,14 @@ export function createApi(
                 result: resultText,
                 table,
                 expression: rawExpr,
-                source: undefined,
+                source: notePath,
                 timestamp: new Date().toISOString(),
                 rollId: globalThis.crypto.randomUUID(),
             };
             emitRoll(result);
             return result;
         } catch (error: unknown) {
-            emitFailureResult(rawExpr, table, error);
+            emitFailureResult(rawExpr, table, error, notePath);
             throw error;
         }
     };
@@ -189,18 +190,29 @@ export function createApi(
             const error = new Error(
                 `Table file "${filePath}" does not exist in the vault`
             );
-            emitFailureResult(expression, tableName, error);
+            emitFailureResult(
+                expression,
+                tableName,
+                error,
+                `__quick_roll__:${filePath}`
+            );
             throw error;
         }
 
         let source: string;
+        const syntheticNotePath = `__quick_roll__:${filePath}`;
         try {
             source = await plugin.app.vault.read(file);
         } catch (error: unknown) {
             const readError = new Error(
                 `Failed to read table file "${filePath}": ${errorMessage(error)}`
             );
-            emitFailureResult(expression, tableName, readError);
+            emitFailureResult(
+                expression,
+                tableName,
+                readError,
+                syntheticNotePath
+            );
             throw readError;
         }
 
@@ -211,7 +223,12 @@ export function createApi(
             const parseError = new Error(
                 `Failed to parse table file "${filePath}": ${errorMessage(error)}`
             );
-            emitFailureResult(expression, tableName, parseError);
+            emitFailureResult(
+                expression,
+                tableName,
+                parseError,
+                syntheticNotePath
+            );
             throw parseError;
         }
 
@@ -219,14 +236,18 @@ export function createApi(
             const error = new Error(
                 `Table "${tableName}" was not found in "${filePath}"`
             );
-            emitFailureResult(expression, tableName, error);
+            emitFailureResult(
+                expression,
+                tableName,
+                error,
+                syntheticNotePath
+            );
             throw error;
         }
 
         const syntheticSource = `\`\`\`randomness\nUse: ${filePath}\n\`\`\``;
         // Colon-prefixed sentinel marks this as synthetic context, not a
         // real vault path, while still carrying the imported file for logs.
-        const syntheticNotePath = `__quick_roll__:${filePath}`;
         let resultText: string;
         try {
             resultText = await evaluateInlineExpression(
@@ -236,14 +257,19 @@ export function createApi(
                 syntheticSource
             );
         } catch (error: unknown) {
-            emitFailureResult(expression, tableName, error);
+            emitFailureResult(
+                expression,
+                tableName,
+                error,
+                syntheticNotePath
+            );
             throw error;
         }
         const result: RollResult = {
             result: resultText,
             table: tableName,
             expression,
-            source: undefined,
+            source: syntheticNotePath,
             timestamp: new Date().toISOString(),
             rollId: globalThis.crypto.randomUUID(),
         };

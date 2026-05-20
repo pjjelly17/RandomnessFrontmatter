@@ -56,6 +56,10 @@ export interface RandomnessSettings {
     sessionTypeKey: string;
     /** Frontmatter VALUE that identifies a session note (e.g. "session"). */
     sessionTypeValue: string;
+    /** Whether to record every roll attempt into the vault history file. Default ON. */
+    historyEnabled: boolean;
+    /** Max history entries to keep — FIFO eviction at this cap. Default 50. */
+    historyMaxEntries: number;
     /**
      * Paths (folders and files) the user has expanded in the generator
      * browser pane. Persisted so the tree remembers its shape across
@@ -90,6 +94,8 @@ export interface RandomnessSettings {
 const DEFAULT_SESSION_AUTO_APPEND = false;
 const DEFAULT_SESSION_TYPE_KEY = "type";
 const DEFAULT_SESSION_TYPE_VALUE = "session";
+const DEFAULT_HISTORY_ENABLED = true;
+const DEFAULT_HISTORY_MAX_ENTRIES = 50;
 
 export const DEFAULT_SETTINGS: RandomnessSettings = {
     generatorRoot: "",
@@ -103,7 +109,18 @@ export const DEFAULT_SETTINGS: RandomnessSettings = {
     sessionAutoAppend: DEFAULT_SESSION_AUTO_APPEND,
     sessionTypeKey: DEFAULT_SESSION_TYPE_KEY,
     sessionTypeValue: DEFAULT_SESSION_TYPE_VALUE,
+    historyEnabled: DEFAULT_HISTORY_ENABLED,
+    historyMaxEntries: DEFAULT_HISTORY_MAX_ENTRIES,
 };
+
+function clampHistoryMaxEntries(value: unknown): number {
+    const parsedValue =
+        typeof value === "number" ? value : Number.parseInt(String(value), 10);
+    if (!Number.isFinite(parsedValue)) {
+        return DEFAULT_HISTORY_MAX_ENTRIES;
+    }
+    return Math.min(500, Math.max(10, Math.trunc(parsedValue)));
+}
 
 /**
  * Settings tab UI. The tab is registered by main.ts via
@@ -274,6 +291,46 @@ export class RandomnessSettingsTab extends PluginSettingTab {
                     )
                     .onChange(async (value) => {
                         this.plugin.settings.sessionTypeValue = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        const historyHeading = document.createElement("h3");
+        historyHeading.textContent = "Roll history";
+        containerEl.appendChild(historyHeading);
+
+        new Setting(containerEl)
+            .setName("Record roll history")
+            .setDesc(
+                "Record every roll into _rolls/history.jsonl in the vault. Disable for a no-trace mode."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings.historyEnabled ??
+                            DEFAULT_SETTINGS.historyEnabled
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.historyEnabled = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Maximum history entries")
+            .setDesc("Maximum history entries (oldest dropped when full).")
+            .addText((text) =>
+                text
+                    .setPlaceholder(String(DEFAULT_HISTORY_MAX_ENTRIES))
+                    .setValue(
+                        String(
+                            this.plugin.settings.historyMaxEntries ??
+                                DEFAULT_SETTINGS.historyMaxEntries
+                        )
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.historyMaxEntries =
+                            clampHistoryMaxEntries(value);
                         await this.plugin.saveSettings();
                     })
             );

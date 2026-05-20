@@ -107,12 +107,16 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 **Behavior-verification pending PJ smoke test.**
 
 ### Phase 1 — Item 5: Roll history
-- [ ] ISC-27: History persisted to `_rolls/history.jsonl` in vault (one JSON object per line)
-- [ ] ISC-28: Each entry: `{rollId, table, result, expression, timestamp, sourcePath}`
-- [ ] ISC-29: History cap: 50 entries by default (FIFO eviction)
-- [ ] ISC-30: New view `RollHistoryView` accessible from sidebar
-- [ ] ISC-31: Each history entry has a "reroll" button that re-invokes `api.roll(table)` with the same source path
-- [ ] ISC-32: Setting toggle to disable history entirely (privacy-respecting default: ON)
+- [x] ISC-27: History persisted to `_rolls/history.jsonl` (vault adapter write, JSON Lines, per-plugin write queue for race safety)
+- [x] ISC-28: Each entry `{rollId, table, result, expression, timestamp, sourcePath, error?}` — added optional `error` for failure-flagged rolls
+- [x] ISC-29: FIFO eviction at `historyMaxEntries` (default 50; clamped to [10, 500])
+- [x] ISC-30: `RollHistoryView` (ItemView, dice icon) registered; command "Open roll history" opens it in a right-sidebar leaf
+- [x] ISC-31: Each row has ↻ reroll button → `api.roll(table, { callerNotePath })`; view refreshes after success
+- [x] ISC-32: `historyEnabled` toggle in settings (default ON) — bail-fast at appendRollToHistory entry
+- [x] +Bonus: `RollResult.source` now populated (was hardcoded `undefined`) — covers success path (notePath), unscoped path (synthetic `__quick_roll__:` value), and failure path (notePath via emitFailureResult sourcePath arg)
+- [x] Build green (`bun run build` exit 0); 811 tests pass (+4 from baseline 807)
+
+**Behavior-verification pending PJ smoke test.**
 
 ### Phase 1 — Item 6: Used/Unused state
 - [ ] ISC-33: Side-state file per `.ipt`: `<table>.used.json` map of rollId → used:true

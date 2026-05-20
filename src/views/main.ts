@@ -32,11 +32,17 @@ import {
     VIEW_TYPE_REFERENCE,
     openReferenceView,
 } from "./referenceView";
+import {
+    RollHistoryView,
+    VIEW_TYPE_ROLL_HISTORY,
+    openRollHistoryView,
+} from "./rollHistoryView";
 import { TableAutocomplete } from "./tableAutocomplete";
 import { createApi, RandomnessFrontmatterAPI } from "../api";
 import { registerRollIntoPropertyCommand } from "./rollIntoPropertyCommand";
 import { registerQuickRollCommand } from "./quickRollCommand";
 import { appendRollToSessionNote } from "./sessionLogAppender";
+import { appendRollToHistory } from "./rollHistoryService";
 
 export default class RandomnessPlugin extends Plugin {
     settings: RandomnessSettings = DEFAULT_SETTINGS;
@@ -76,6 +82,11 @@ export default class RandomnessPlugin extends Plugin {
         });
         this.register(unsubscribeRollLog);
 
+        const unsubscribeRollHistory = this.api.onRoll((result) => {
+            void appendRollToHistory(this, result);
+        });
+        this.register(unsubscribeRollHistory);
+
         // Register the codeblock processor for ```randomness blocks.
         this.registerMarkdownCodeBlockProcessor(
             "randomness",
@@ -99,6 +110,10 @@ export default class RandomnessPlugin extends Plugin {
         this.registerView(
             VIEW_TYPE_REFERENCE,
             (leaf) => new ReferenceView(leaf, this)
+        );
+        this.registerView(
+            VIEW_TYPE_ROLL_HISTORY,
+            (leaf) => new RollHistoryView(leaf, this)
         );
 
         // Register the inline rdm:[@/#/! table-name autocomplete.
@@ -127,6 +142,14 @@ export default class RandomnessPlugin extends Plugin {
             id: "open-reference",
             name: "Open reference",
             callback: () => void openReferenceView(this),
+        });
+
+        this.addCommand({
+            id: "open-roll-history",
+            name: "Open roll history",
+            callback: () => {
+                void openRollHistoryView(this);
+            },
         });
 
         // Phase 1 items #2 and #3 — roll-into-property and
