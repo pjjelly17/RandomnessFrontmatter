@@ -51,13 +51,6 @@ ecosystem.
 2. Open BRAT settings → Add Beta Plugin → enter this repo's URL.
 3. Enable "Randomness" under Community Plugins.
 
-### Manually
-
-1. Download `main.js`, `manifest.json` (and `styles.css` if present) from the
-   latest [release](../../releases).
-2. Copy them into `.obsidian/plugins/randomness/` inside your vault.
-3. Enable "Randomness" under Settings → Community Plugins.
-
 ## Usage
 
 ### Codeblocks
@@ -179,19 +172,6 @@ Preview's underlying source immediately.
 Codeblock generators (`` ```randomness ``) work in both views —
 those use the codeblock processor, which Live Preview does handle.
 
-## Security
-
-The plugin's HTML output passes through a tag whitelist before being
-attached to the DOM. Allowed tags: structural (p, div, ul, ol, li, hr,
-blockquote, pre, h1–h6), inline formatting (b, i, u, em, strong, s, code,
-br, span, and a few others), and tables. All attributes are stripped.
-Anything outside the whitelist — `<script>`, `<iframe>`, `<a>`, event
-handlers like `onclick` — is dropped along with its content.
-
-**You should still only use generators you trust.** The whitelist is
-defence-in-depth, not a free pass to run arbitrary `.ipt` files from
-strangers.
-
 ## Attribution
 
 This plugin is MIT-licensed (see [LICENSE](LICENSE)).
@@ -208,20 +188,6 @@ copyright of its original authors and is governed by whatever licenses
 those authors chose. The plugin does not include or distribute generator
 content; the corpus shipped in the dev repo is for testing only.
 
-## Development
-
-Pure-TypeScript engine and resolver, no Obsidian imports outside
-`src/views/`. The test suite runs against in-memory file sources and
-jsdom for DOM testing — no Obsidian instance required to develop.
-
-```bash
-npm install         # one-time setup
-npm test            # run the full suite (~2s, 459 tests)
-npx tsc --noEmit    # strict typecheck
-npm run build       # bundle for distribution
-npm run dev         # watch mode
-```
-
 Architecture in three layers:
 
 - **Engine** (`src/engine/`) — pure IPP3 evaluator. AST, parsers,
@@ -233,5 +199,3 @@ Architecture in three layers:
   Codeblock processor, inline processor, settings, lock/reroll state
   machine, prompt UI, HTML sanitiser.
 
-See `STATUS.md` for the full design log including bugs found and fixed,
-trade-offs accepted, and outstanding items.
