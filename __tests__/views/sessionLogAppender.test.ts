@@ -182,7 +182,12 @@ describe("appendRollToSessionNote", () => {
         });
         const rollResult = makeRollResult();
         const parsedDate = new Date(rollResult.timestamp);
-        const expectedTime = `${String(parsedDate.getHours()).padStart(2, "0")}:${String(parsedDate.getMinutes()).padStart(2, "0")}`;
+        const expectedMonth = String(parsedDate.getMonth() + 1).padStart(2, "0");
+        const expectedDay = String(parsedDate.getDate()).padStart(2, "0");
+        const expectedYear = parsedDate.getFullYear();
+        const expectedHours = String(parsedDate.getHours()).padStart(2, "0");
+        const expectedMinutes = String(parsedDate.getMinutes()).padStart(2, "0");
+        const expectedTime = `${expectedMonth}/${expectedDay}/${expectedYear} ${expectedHours}:${expectedMinutes}`;
 
         await appendRollToSessionNote(plugin as never, rollResult);
 

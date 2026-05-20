@@ -66,9 +66,12 @@ function formatRollTime(timestamp: string): string {
     if (!Number.isFinite(parsedMs)) {
         throw new Error(`Invalid roll timestamp: ${timestamp}`);
     }
+    const month = String(parsedDate.getMonth() + 1).padStart(2, "0");
+    const day = String(parsedDate.getDate()).padStart(2, "0");
+    const year = parsedDate.getFullYear();
     const hours = String(parsedDate.getHours()).padStart(2, "0");
     const minutes = String(parsedDate.getMinutes()).padStart(2, "0");
-    return `${hours}:${minutes}`;
+    return `${month}/${day}/${year} ${hours}:${minutes}`;
 }
 
 function buildRollLogLine(rollResult: RollResult): string {
