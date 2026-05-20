@@ -5,6 +5,11 @@
 import { TFile } from "obsidian";
 import { parseGeneratorFile } from "../engine/fileParser";
 import { evaluateInlineExpression } from "../views/inlineProcessor";
+import { buildInlineBundle } from "../resolver/scope";
+import { prefetchUseGraph } from "../resolver/asyncPrefetcher";
+import { vaultFileSource } from "../views/vaultFileSource";
+import { discoverGenerators } from "../views/browserView";
+import { collectTablesFromBundle } from "../views/tableAutocomplete";
 import type RandomnessPlugin from "../views/main";
 
 const API_VERSION = "0.1.0" as const;
@@ -36,6 +41,19 @@ export interface RollResult {
 
 export type RollEventListener = (result: RollResult) => void;
 
+export interface TableSource {
+    /** Table identifier as it appears after `Table:` */
+    name: string;
+    /** Human-readable origin label, e.g. "(this note)", "Herbs.ipt", "6 - Tables/Herbs.ipt" */
+    source: string;
+    /** True for the file's first/main table */
+    isMain: boolean;
+    /** True if this table is reachable from the caller note's Use: graph */
+    inScope: boolean;
+    /** Vault-relative path of the .ipt file. Empty string for tables defined inside the note's own codeblock. */
+    filePath: string;
+}
+
 export interface RandomnessFrontmatterAPI {
     readonly version: string;
     /** Wraps the requested table name as [@name]; names that need IPP3 escaping must already be passed in parser-safe form. */
@@ -48,6 +66,15 @@ export interface RandomnessFrontmatterAPI {
     ): Promise<RollResult>;
     /** Accepts callerNotePath for future scope-aware listing, but v0.1 returns the full vault-wide .ipt table list either way. */
     tables(callerNotePath?: string): Promise<string[]>;
+    /**
+     * Scope-aware table listing: in-scope tables (reachable from
+     * the caller note's Use: graph) first, then out-of-scope
+     * (vault-wide). Used by the "Roll into property" command's
+     * SuggestModal to surface non-imported tables with an
+     * indicator that the caller will inject a Use: line before
+     * rolling them.
+     */
+    tablesWithSources(callerNotePath?: string): Promise<TableSource[]>;
     onRoll(callback: RollEventListener): () => void;
 }
 
@@ -153,6 +180,118 @@ export function createApi(
             }
 
             return [...names].sort((a, b) => a.localeCompare(b));
+        },
+        /**
+         * Scope-aware listing. In-scope items come from the caller
+         * note's Use: graph (same pipeline TableAutocomplete uses
+         * for inline suggestions). Out-of-scope items come from a
+         * vault-wide .ipt scan via discoverGenerators, minus any
+         * name already present in scope.
+         *
+         * Silent-degrades on per-stage errors (broken Use: ref,
+         * unparseable .ipt, etc.) so callers get a partial answer
+         * instead of an exception — same graceful-degradation
+         * pattern as the autocomplete popup.
+         */
+        async tablesWithSources(
+            callerNotePath?: string
+        ): Promise<TableSource[]> {
+            const notePath = resolveCallerNotePath(plugin, {
+                callerNotePath,
+            });
+            const { vault } = plugin.app;
+
+            // Stage 1: in-scope tables for the caller note.
+            const inScope: TableSource[] = [];
+            if (notePath) {
+                try {
+                    const file = vault.getAbstractFileByPath(notePath);
+                    if (file instanceof TFile && file.extension === "md") {
+                        const source = await vault.read(file);
+                        const asyncSource = vaultFileSource(vault);
+                        const prefetch = await prefetchUseGraph({
+                            entryPath: notePath,
+                            entrySource: source,
+                            generatorRoot:
+                                plugin.settings.generatorRoot || undefined,
+                            source: asyncSource,
+                        });
+                        const bundle = buildInlineBundle(
+                            "__inline_tables_with_sources__",
+                            {
+                                notePath,
+                                noteSource: source,
+                                source: prefetch.source,
+                                generatorRoot:
+                                    plugin.settings.generatorRoot ||
+                                    undefined,
+                            }
+                        );
+                        const collected = collectTablesFromBundle(
+                            bundle.extras,
+                            bundle.loadedPaths
+                        );
+                        for (const t of collected) {
+                            inScope.push({
+                                name: t.name,
+                                source: t.source,
+                                isMain: t.isMain,
+                                inScope: true,
+                                filePath: t.filePath,
+                            });
+                        }
+                    }
+                } catch (error: unknown) {
+                    console.warn(
+                        "randomness-frontmatter: tablesWithSources in-scope build failed",
+                        error
+                    );
+                }
+            }
+
+            // Cheap lookup for the dedupe step below.
+            const inScopeNames = new Set(
+                inScope.map((t) => t.name.toLowerCase())
+            );
+
+            // Stage 2: vault-wide tables, excluding anything already
+            // in scope. discoverGenerators walks every .ipt under
+            // the configured generator root (or the whole vault).
+            const outOfScope: TableSource[] = [];
+            try {
+                const discovered = await discoverGenerators(plugin);
+                const seen = new Set<string>();
+                for (const result of discovered) {
+                    if (!result.ok) continue;
+                    const { gen } = result;
+                    for (let i = 0; i < gen.tables.length; i++) {
+                        const t = gen.tables[i];
+                        const key = t.name.toLowerCase();
+                        // Skip if already in-scope OR if a previous
+                        // .ipt declared the same name (first-wins
+                        // mirrors the evaluator's behaviour).
+                        if (inScopeNames.has(key)) continue;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        outOfScope.push({
+                            name: t.name,
+                            source: gen.title,
+                            isMain: i === 0,
+                            inScope: false,
+                            filePath: gen.path,
+                        });
+                    }
+                }
+            } catch (error: unknown) {
+                console.warn(
+                    "randomness-frontmatter: tablesWithSources vault scan failed",
+                    error
+                );
+            }
+
+            // In-scope first so the caller (a SuggestModal) can keep
+            // the most-useful options at the top of the list.
+            return [...inScope, ...outOfScope];
         },
         onRoll(callback: RollEventListener): () => void {
             listeners.add(callback);

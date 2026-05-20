@@ -73,6 +73,20 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 
 **Behavioral ISCs (modal interaction, frontmatter write actually landing) pending PJ smoke test in Obsidian — see Verification section.**
 
+### Phase 1.5 — Auto-add `Use:` on out-of-scope table pick (scope-mismatch fix)
+- [x] ISC-17a: `src/views/useInjection.ts` created; exports `findFirstRandomnessCodeblock` (L42), `findFrontmatterEnd` (L85), `ensureUseInScope` (L118), `ensureUseInSource` (L202, new — string variant for vault.modify fallback path)
+- [x] ISC-17b: `tableAutocomplete.ts` imports from useInjection.ts; private helpers removed; re-export shim keeps existing test imports working; 799 tests pass
+- [x] ISC-17c: `TableSource` interface exported from api/index.ts (L44): `{ name, source, isMain, inScope, filePath }`
+- [x] ISC-17d: `api.tablesWithSources(callerNotePath?)` added (L196-291); in-scope built via vaultFileSource+prefetchUseGraph+buildInlineBundle, out-of-scope via discoverGenerators; silent-degrades on per-stage errors
+- [x] ISC-17e: `api.tables()` untouched
+- [x] ISC-17f: rollIntoPropertyCommand uses `tablesWithSources()`; out-of-scope items render `(not imported) <source>` subtitle
+- [x] ISC-17g: On out-of-scope pick: `injectUseLine` helper picks editor (preferred, preserves undo) or vault.modify fallback; Notice fires only when lines actually added
+- [x] ISC-17h: Roll proceeds via existing `api.rollIntoProperty(key, name)` after injection
+- [x] ISC-17i: In-scope picks bypass injection entirely (branch at command line 218)
+- [x] ISC-17j: `bun run build` exit 0; tsc strict passes; 799 tests green; main.js 88974→91342 bytes
+
+**Behavioral verification pending PJ smoke test in NoStone5e — see Verification section.**
+
 ### Phase 1 — Item 3: Quick-roll palette
 - [ ] ISC-18: Single command registered: `randomness-frontmatter:quick-roll`
 - [ ] ISC-19: SuggestModal with fuzzy search across all visible tables

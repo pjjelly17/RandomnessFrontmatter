@@ -1,41 +1,82 @@
 /**
- * "Roll into property" command — Phase 1 item #2.
+ * "Roll into property" command — Phase 1 item #2, Phase 1.5
+ * upgrade for scope-aware table picking.
  *
  * Two-step flow:
- *   1. SuggestModal lists tables visible from the API.
+ *   1. SuggestModal lists tables visible from the API, in-scope
+ *      first then out-of-scope (vault-wide, not imported).
  *   2. Modal prompts for the property key.
- *   3. api.rollIntoProperty(key, table) writes the result into the
- *      active note's frontmatter via app.fileManager.processFrontMatter.
+ *   3. If the picked table was out-of-scope, inject a `Use:` line
+ *      into the active note (preferring the editor for undo-group
+ *      affinity, falling back to vault.modify if no editor is
+ *      attached).
+ *   4. api.rollIntoProperty(key, table) writes the result into
+ *      the active note's frontmatter via app.fileManager
+ *      .processFrontMatter.
  *
- * Uses the public JS API (src/api) rather than reaching into engine
- * internals — eats own dogfood per ISA principle.
+ * Why inject Use: before rolling: rollIntoProperty resolves the
+ * table through the scoped resolver, which will not see tables
+ * that aren't reachable from the active note's Use: graph. Picking
+ * one of those tables from a vault-wide list would otherwise fail
+ * with "table not found" — confusing to the user, since the table
+ * was right there in the picker. Auto-injecting the import is the
+ * direct, undoable resolution.
  */
 
-import { App, Modal, Notice, SuggestModal, TFile } from "obsidian";
+import {
+    App,
+    MarkdownView,
+    Modal,
+    Notice,
+    SuggestModal,
+    TFile,
+} from "obsidian";
 import type RandomnessPlugin from "./main";
+import type { TableSource } from "../api";
+import { ensureUseInScope, ensureUseInSource } from "./useInjection";
 
-class TableSuggestModal extends SuggestModal<string> {
+class TableSuggestModal extends SuggestModal<TableSource> {
     constructor(
         app: App,
-        private readonly tables: string[],
-        private readonly onChoose: (table: string) => void
+        private readonly tables: TableSource[],
+        private readonly onChoose: (item: TableSource) => void
     ) {
         super(app);
         this.setPlaceholder("Pick a table to roll…");
     }
 
-    getSuggestions(query: string): string[] {
+    getSuggestions(query: string): TableSource[] {
+        // Case-insensitive substring filter on name. Preserve
+        // incoming order, which the API already structured as
+        // in-scope-first.
         const q = query.trim().toLowerCase();
         if (!q) return this.tables;
-        return this.tables.filter((t) => t.toLowerCase().includes(q));
+        return this.tables.filter((t) =>
+            t.name.toLowerCase().includes(q)
+        );
     }
 
-    renderSuggestion(table: string, el: HTMLElement): void {
-        el.createEl("div", { text: table });
+    renderSuggestion(item: TableSource, el: HTMLElement): void {
+        // Two-row layout: name on top, source subtitle below.
+        // Out-of-scope items get a "(not imported)" prefix so the
+        // user knows picking this will inject a Use: line.
+        //
+        // Plain DOM + inline styles (not the EditorSuggest CSS
+        // classes from tableAutocomplete) because SuggestModal is
+        // themed differently — reusing those classes would inherit
+        // unrelated layout. Inline styles keep the cost local;
+        // no new global CSS gets introduced for one modal.
+        const nameEl = el.createEl("div", { text: item.name });
+        nameEl.style.fontWeight = "500";
+        const sub = el.createEl("small");
+        sub.style.opacity = "0.7";
+        sub.textContent = item.inScope
+            ? item.source
+            : `(not imported) ${item.source}`;
     }
 
-    onChooseSuggestion(table: string): void {
-        this.onChoose(table);
+    onChooseSuggestion(item: TableSource): void {
+        this.onChoose(item);
     }
 }
 
@@ -44,8 +85,8 @@ class PropertyKeyModal extends Modal {
 
     constructor(
         app: App,
-        private readonly table: string,
-        private readonly onSubmit: (key: string) => void
+        private readonly item: TableSource,
+        private readonly onSubmit: (key: string, item: TableSource) => void
     ) {
         super(app);
     }
@@ -53,7 +94,7 @@ class PropertyKeyModal extends Modal {
     onOpen(): void {
         const { contentEl } = this;
         contentEl.createEl("h3", {
-            text: `Roll [@${this.table}] into property…`,
+            text: `Roll [@${this.item.name}] into property…`,
         });
         contentEl.createEl("p", {
             text: "Property key (frontmatter field name):",
@@ -88,12 +129,45 @@ class PropertyKeyModal extends Modal {
             return;
         }
         this.close();
-        this.onSubmit(key);
+        this.onSubmit(key, this.item);
     }
 
     onClose(): void {
         this.contentEl.empty();
     }
+}
+
+/**
+ * Inject `Use: <filePath>` into the given file. Preferred path is
+ * through the active MarkdownView's editor (single undo group, so
+ * Ctrl-Z reverts the import in one step); falls back to
+ * vault.modify when no such editor is attached to the active file
+ * — e.g. the user invoked the command while a non-markdown view
+ * was focused, or the file is open in preview-only mode.
+ *
+ * Returns the number of source lines added (0 if the Use: line
+ * was already there).
+ */
+async function injectUseLine(
+    plugin: RandomnessPlugin,
+    file: TFile,
+    filePath: string
+): Promise<number> {
+    const view = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (view && view.file && view.file.path === file.path) {
+        return ensureUseInScope(view.editor, filePath);
+    }
+    // Source-string fallback. Same three-branch behaviour as the
+    // editor variant, just operating on the file's raw text.
+    const source = await plugin.app.vault.read(file);
+    const { newSource, linesAdded } = ensureUseInSource(
+        source,
+        filePath
+    );
+    if (linesAdded > 0) {
+        await plugin.app.vault.modify(file, newSource);
+    }
+    return linesAdded;
 }
 
 export function registerRollIntoPropertyCommand(
@@ -109,12 +183,17 @@ export function registerRollIntoPropertyCommand(
                 return;
             }
 
-            let tables: string[];
+            let tables: TableSource[];
             try {
-                tables = await plugin.api.tables();
+                tables = await plugin.api.tablesWithSources(file.path);
             } catch (error: unknown) {
-                new Notice("Randomness Frontmatter: failed to list tables");
-                console.error("randomness-frontmatter: api.tables() failed", error);
+                new Notice(
+                    "Randomness Frontmatter: failed to list tables"
+                );
+                console.error(
+                    "randomness-frontmatter: api.tablesWithSources() failed",
+                    error
+                );
                 return;
             }
             if (tables.length === 0) {
@@ -124,26 +203,50 @@ export function registerRollIntoPropertyCommand(
                 return;
             }
 
-            new TableSuggestModal(plugin.app, tables, (table) => {
-                new PropertyKeyModal(plugin.app, table, async (key) => {
-                    try {
-                        const rollResult = await plugin.api.rollIntoProperty(
-                            key,
-                            table
-                        );
-                        new Notice(
-                            `Rolled [@${table}] → ${key}: ${rollResult.result}`
-                        );
-                    } catch (error: unknown) {
-                        new Notice(
-                            `Randomness Frontmatter: roll failed — ${error instanceof Error ? error.message : String(error)}`
-                        );
-                        console.error(
-                            "randomness-frontmatter: roll-into-property failed",
-                            error
-                        );
+            new TableSuggestModal(plugin.app, tables, (item) => {
+                new PropertyKeyModal(
+                    plugin.app,
+                    item,
+                    async (key, picked) => {
+                        try {
+                            // For out-of-scope picks, inject Use:
+                            // FIRST so the scoped resolver in
+                            // rollIntoProperty can see the table.
+                            // Without this, the roll would fail on
+                            // first try and the user would have to
+                            // re-run the command.
+                            if (!picked.inScope && picked.filePath) {
+                                const linesAdded = await injectUseLine(
+                                    plugin,
+                                    file,
+                                    picked.filePath
+                                );
+                                if (linesAdded > 0) {
+                                    new Notice(
+                                        `Added "Use: ${picked.filePath}" to randomness codeblock`
+                                    );
+                                }
+                            }
+
+                            const rollResult =
+                                await plugin.api.rollIntoProperty(
+                                    key,
+                                    picked.name
+                                );
+                            new Notice(
+                                `Rolled [@${picked.name}] → ${key}: ${rollResult.result}`
+                            );
+                        } catch (error: unknown) {
+                            new Notice(
+                                `Randomness Frontmatter: roll failed — ${error instanceof Error ? error.message : String(error)}`
+                            );
+                            console.error(
+                                "randomness-frontmatter: roll-into-property failed",
+                                error
+                            );
+                        }
                     }
-                }).open();
+                ).open();
             }).open();
         },
     });
