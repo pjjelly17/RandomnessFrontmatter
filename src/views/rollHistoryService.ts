@@ -13,8 +13,33 @@ export interface HistoryEntry {
     error?: string;
 }
 
-export const HISTORY_FILE_PATH = "_rolls/history.jsonl";
+/**
+ * Canonical history file. Stored as markdown (not JSONL) so PJ can
+ * open it inside Obsidian and skim the roll log without bouncing to
+ * an external text editor. Machine-readable bits (rollId / sourcePath
+ * / timestamp / table / error) live in a per-line HTML comment so
+ * loadRollHistory can round-trip cleanly while the human view stays
+ * a clean bulleted list.
+ */
+export const HISTORY_FILE_PATH = "_rolls/history.md";
+
+/** Pre-2026-05-20 location. Read once at first load, then deleted. */
+const LEGACY_HISTORY_FILE_PATH = "_rolls/history.jsonl";
+
 const HISTORY_FOLDER_PATH = "_rolls";
+
+/**
+ * Regex matching one history line. Anchored to a full line.
+ *   group 1 — optional failure marker "❌ "
+ *   group 2 — formatted timestamp (display only; truth is in the comment)
+ *   group 3 — expression (e.g. `[@Plant]`)
+ *   group 4 — result text (single line; newlines are escaped on write)
+ *   group 5 — JSON metadata blob
+ */
+const HISTORY_LINE_RE =
+    /^- (❌ )?`([^`]+)` · `([^`]+)` → (.+?) <!-- randomness-history: ({.+}) -->$/;
+
+const FILE_HEADER = "# Roll History\n\n";
 
 const appendQueues = new WeakMap<RandomnessPlugin, Promise<void>>();
 
@@ -44,6 +69,92 @@ function buildHistoryEntry(result: RollResult): HistoryEntry {
     };
 }
 
+function formatDisplayTimestamp(iso: string): string {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) {
+        return iso;
+    }
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return `${mm}/${dd}/${yyyy} ${hh}:${min}`;
+}
+
+function escapeForMarkdownLine(text: string): string {
+    // Newlines would shatter the per-line regex; preserve them as a
+    // literal escape sequence so round-trip stays exact.
+    return text.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "\\r");
+}
+
+function unescapeFromMarkdownLine(text: string): string {
+    return text.replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\\\/g, "\\");
+}
+
+function serializeEntry(entry: HistoryEntry): string {
+    const displayTs = formatDisplayTimestamp(entry.timestamp);
+    const failureMark = entry.error ? "❌ " : "";
+    const resultText = escapeForMarkdownLine(entry.result);
+    const meta = {
+        rollId: entry.rollId,
+        table: entry.table,
+        timestamp: entry.timestamp,
+        sourcePath: entry.sourcePath,
+        ...(entry.error ? { error: entry.error } : {}),
+    };
+    return (
+        `- ${failureMark}\`${displayTs}\` · \`${entry.expression}\` → ` +
+        `${resultText} <!-- randomness-history: ${JSON.stringify(meta)} -->`
+    );
+}
+
+function parseEntry(line: string): HistoryEntry | null {
+    const m = HISTORY_LINE_RE.exec(line);
+    if (!m) return null;
+    const expression = m[3];
+    const result = unescapeFromMarkdownLine(m[4]);
+    let meta: {
+        rollId?: string;
+        table?: string;
+        timestamp?: string;
+        sourcePath?: string;
+        error?: string;
+    };
+    try {
+        meta = JSON.parse(m[5]);
+    } catch {
+        return null;
+    }
+    if (
+        typeof meta.rollId !== "string" ||
+        typeof meta.table !== "string" ||
+        typeof meta.timestamp !== "string" ||
+        typeof meta.sourcePath !== "string"
+    ) {
+        return null;
+    }
+    const entry: HistoryEntry = {
+        rollId: meta.rollId,
+        table: meta.table,
+        result,
+        expression,
+        timestamp: meta.timestamp,
+        sourcePath: meta.sourcePath,
+    };
+    if (meta.error !== undefined) {
+        entry.error = meta.error;
+    }
+    return entry;
+}
+
+function serializeAllEntries(entries: HistoryEntry[]): string {
+    if (entries.length === 0) {
+        return FILE_HEADER;
+    }
+    return FILE_HEADER + entries.map(serializeEntry).join("\n") + "\n";
+}
+
 async function ensureHistoryFolder(
     plugin: RandomnessPlugin
 ): Promise<void> {
@@ -52,9 +163,6 @@ async function ensureHistoryFolder(
             return;
         }
         if (typeof plugin.app.vault.createFolder !== "function") {
-            // The adapter write may still succeed in tests or on adapters
-            // that materialise parent paths implicitly, so there is nothing
-            // useful to do here beyond skipping the unavailable API.
             return;
         }
         try {
@@ -77,6 +185,59 @@ async function ensureHistoryFolder(
     }
 }
 
+/**
+ * One-shot migration: when the markdown file is missing but the
+ * legacy JSONL file exists, read the JSONL, write the markdown, and
+ * remove the old file. Runs inside loadRollHistory so it happens
+ * lazily on the first access after upgrade.
+ */
+async function migrateLegacyHistoryIfNeeded(
+    plugin: RandomnessPlugin
+): Promise<HistoryEntry[] | null> {
+    const adapter = plugin.app.vault.adapter;
+    try {
+        if (await adapter.exists(HISTORY_FILE_PATH)) {
+            return null;
+        }
+        if (!(await adapter.exists(LEGACY_HISTORY_FILE_PATH))) {
+            return null;
+        }
+        const legacySource = await adapter.read(LEGACY_HISTORY_FILE_PATH);
+        const entries: HistoryEntry[] = [];
+        for (const line of legacySource.split("\n")) {
+            const trimmed = line.trim();
+            if (trimmed === "") continue;
+            try {
+                entries.push(JSON.parse(trimmed) as HistoryEntry);
+            } catch (error: unknown) {
+                console.warn(
+                    "randomness-frontmatter: legacy history line dropped",
+                    error
+                );
+            }
+        }
+        await ensureHistoryFolder(plugin);
+        await adapter.write(HISTORY_FILE_PATH, serializeAllEntries(entries));
+        try {
+            await adapter.remove(LEGACY_HISTORY_FILE_PATH);
+        } catch (error: unknown) {
+            // Non-fatal — the markdown file is the new source of
+            // truth; the legacy file will just sit there harmlessly.
+            console.warn(
+                "randomness-frontmatter: failed to remove legacy history file",
+                error
+            );
+        }
+        return entries;
+    } catch (error: unknown) {
+        console.warn(
+            "randomness-frontmatter: legacy history migration failed",
+            error
+        );
+        return null;
+    }
+}
+
 async function appendHistoryEntry(
     plugin: RandomnessPlugin,
     result: RollResult
@@ -93,10 +254,11 @@ async function appendHistoryEntry(
         if (entries.length > maxEntries) {
             entries.splice(0, entries.length - maxEntries);
         }
-        const content =
-            entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n";
         await ensureHistoryFolder(plugin);
-        await plugin.app.vault.adapter.write(HISTORY_FILE_PATH, content);
+        await plugin.app.vault.adapter.write(
+            HISTORY_FILE_PATH,
+            serializeAllEntries(entries)
+        );
     } catch (error: unknown) {
         console.warn(
             "randomness-frontmatter: roll history append failed",
@@ -133,23 +295,30 @@ export async function appendRollToHistory(
 export async function loadRollHistory(
     plugin: RandomnessPlugin
 ): Promise<HistoryEntry[]> {
-    const parsedEntries: HistoryEntry[] = [];
+    const migrated = await migrateLegacyHistoryIfNeeded(plugin);
+    if (migrated !== null) {
+        return migrated;
+    }
 
+    const parsedEntries: HistoryEntry[] = [];
     try {
         if (!(await plugin.app.vault.adapter.exists(HISTORY_FILE_PATH))) {
             return [];
         }
         const source = await plugin.app.vault.adapter.read(HISTORY_FILE_PATH);
-        const lines = source.split("\n").filter((line) => line.trim() !== "");
+        const lines = source.split("\n");
         for (const line of lines) {
-            try {
-                parsedEntries.push(JSON.parse(line) as HistoryEntry);
-            } catch (error: unknown) {
+            const trimmed = line.trim();
+            if (trimmed === "" || trimmed.startsWith("#")) continue;
+            const entry = parseEntry(trimmed);
+            if (entry === null) {
                 console.warn(
-                    "randomness-frontmatter: skipping invalid roll history line",
-                    error
+                    "randomness-frontmatter: skipping unparseable history line",
+                    trimmed
                 );
+                continue;
             }
+            parsedEntries.push(entry);
         }
     } catch (error: unknown) {
         console.warn(
@@ -173,8 +342,5 @@ export async function waitForRollHistoryWrites(
     if (!pendingAppend) {
         return;
     }
-    await pendingAppend.catch(() => {
-        // Append failures are already logged by the write path; callers only
-        // need the queue to settle before they refresh their UI.
-    });
+    await pendingAppend.catch(() => {});
 }
