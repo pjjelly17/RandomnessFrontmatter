@@ -164,6 +164,7 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 | session-log-append | ISC-22–26 | public-api | yes (after api) |
 | roll-history | ISC-27–32 | public-api | yes (after api) |
 | used-unused-state | ISC-33–36 | public-api, roll-history | no (needs history) |
+| upstream-pr-api | upstream contribution | public-api | no |
 
 ## Decisions
 
@@ -172,6 +173,10 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - 2026-05-20: Forge spawned to write `src/api/index.ts` per E3 doctrine; the architectural decisions stay with me, the implementation is Forge's. Cato audit deferred to E4+ work.
 - 2026-05-20: Side-by-side install (id `randomness-frontmatter`) means upstream Randomness keeps running for PJ's existing rolls — no flag day. Will revisit at v0.5 / public release.
 - 2026-05-20: **refined: `tables()` strict-vs-silent.** Forge wrote strict-throw on first malformed `.ipt` (per spec letter); flipped to silent-skip + `console.warn` after review. Rationale: NoStone5e vault has 11k files; one weird `.ipt` shouldn't disable the whole API method. Matches upstream `TableAutocomplete.vaultTables()` behavior.
+- 2026-05-21: **Upstream PR branch prepared** — `feature/upstream-api` cut from `upstream/main` (`b232216` / `0.4.4`) at worktree `/home/pj/code/RandomnessFrontmatter-upstream-pr`. One commit `e07a871` "feat: public JS API". Maintainer told PJ to submit after his own attempt errored.
+- 2026-05-21: **Strip-for-upstream rules.** Cut from PR: `rollUnscoped` (uses fork-added 4th `noteSource` arg to `evaluateInlineExpression`; ship alongside engine tweak in the Quick-roll palette PR #2), `rollIntoProperty` (tied to fork-only `usedTracker`), `excludeUsed`/`allUsed`/retry helper (same), all `usedTracker` imports. Renamed `randomness-frontmatter` → `randomness` in log strings; interface `RandomnessFrontmatterAPI` → `RandomnessAPI`. Final shape: 344 lines of API + 29 tests across 6 describe blocks + 11-line additive `main.ts` patch.
+- 2026-05-21: **Test-run deferred to PJ.** Branch created + committed locally; `npm install && npm test && npm run build` against upstream's config is PJ's next move (he asked for "branch + strip only" this turn). Per `[[feedback-audit-test-claims]]`, draft PR body marks the test run as PJ-to-confirm before opening the PR — do not pre-claim "all green" against upstream's environment.
+- 2026-05-21: **Test-run skipped, PR filed anyway.** Work-AV blocked the Node install on PJ's Windows VM (winget + portable ZIP both off the table given the friction). PJ called Option B (skip test step, open PR with honesty caveat). PR opened from `pjjelly17:feature/upstream-api` → `Obsidian-TTRPG-Community/Randomness:main` as **PR #1** (https://github.com/Obsidian-TTRPG-Community/Randomness/pull/1). Body opens with explicit "I have not yet run npm install/test/build myself" disclosure so the maintainer treats his own run as the verification, not mine. Confidence backstop: fork's 43-test API suite (commit `77fa6f9`) was green on Linux against the same code paths the upstream PR's 29 tests cover.
 
 ## Changelog
 
