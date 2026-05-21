@@ -175,11 +175,25 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 
 ## Changelog
 
-(empty at fork seed — will fill via Skill("ISA", "append changelog ...") as conjectures get refuted)
+### 2026-05-20 — code-read verification ≠ behavior verification
+
+- **conjectured:** API verified by Read/Grep of `src/api/index.ts` was sufficient evidence for ISC-1–10 pass
+- **refuted_by:** PJ audit question "we have not tests the js api in ours then?" — `rg "rollExpression|rollUnscoped|rollIntoProperty|onRoll" __tests__/` returned ZERO test files exercising these methods. Type-only imports in two view tests were the entire API test surface.
+- **learned:** "verified Read 194 lines" demonstrates the symbol exists, not that it behaves correctly. The underlying engine + resolver paths being well-tested doesn't transitively cover the API facade — wiring bugs, error-emission contracts, listener semantics, retry caps all live ONLY in the API layer and need their own probes.
+- **criterion_now:** ISCs claiming behavioral contracts (return shapes, error paths, event emissions, side effects) MUST cite a test-pass probe (`bun run test` line + assertion), not a code-Read probe. Code-Read remains valid for ISCs about file existence, signature, or type-level claims.
 
 ## Verification
 
-### 2026-05-20 — Phase 1 items 1+2 code verification
+### 2026-05-20 — Phase 1 API behavior verification
+
+Test-pass evidence via `npx jest`:
+- `__tests__/api/index.test.ts` (807 lines, 43 tests, all green; 0.6s wall)
+- Full repo sweep: 29 suites, 859 tests passing (816 prior + 43 new, zero regressions; 8s wall)
+- ISC-1–10 now upgraded from Read-evidence to test-pass evidence per the criterion_now in the Changelog entry above
+- Coverage per method: version (2) · roll (10, incl. excludeUsed retry cap + UUID uniqueness) · rollUnscoped (3) · rollExpression (7) · rollIntoProperty (5, incl. processFrontMatter mock assertion + auto-mark-used toggle) · tables (3, dedup + scope) · tablesWithSources (7, shape + sources populated) · onRoll (6, success + error + unsubscribe + multi-subscriber + listener-throw swallow)
+- Three potential API behaviors surfaced by Forge during test writing (recorded in `drafts/upstream-pr-api.md` honest-caveats section for the upstream PR): rollIntoProperty used-key uses user-supplied table name not canonical identity; tablesWithSources silently swallows both stage failures; excludeUsed retry re-prefetches Use: graph each attempt.
+
+### 2026-05-20 — Phase 1 items 1+2 code verification (initial)
 
 Static evidence (Read/Grep against shipped files):
 - ISC-1–10 (Public JS API): All 10 ISCs verified by direct Read of `src/api/index.ts` and `src/views/main.ts` integration. Build green; types strict.
