@@ -223,6 +223,14 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 
 ## Verification
 
+### 2026-06-03 — re-port + directive: build/test verified, runtime smoke IN PROGRESS
+
+- **Build:** `bun run build` clean; `tsc -noEmit -skipLibCheck` strict; `main.js` 117–120KB.
+- **Tests:** `npx jest` → 977 tests / 40 suites green (962 re-port + 15 directive). NOT `bun test` (see [[reference-randomness-test-runner]]).
+- **Git:** `main` = `3f87176`, force-pushed to `origin` (after granting the gh token `workflow` scope — upstream's `release.yml` requires it). Backup tag `pre-report-backup-0.4.4` (e08db3d) pushed to origin too. `report/1.0.11` branch is now redundant with main.
+- **Vault install (filesystem-verified):** `NoStone5e/.obsidian/plugins/randomness-frontmatter/` symlinks main.js/manifest/styles → repo; manifest reads `randomness-frontmatter` v0.2.0; Hot Reload on; upstream `randomness` NOT in community-plugins.json → **no id collision**.
+- **Runtime smoke (ISC-61): PENDING.** Could not launch Obsidian with `--remote-debugging-port=9222` from the agent shell — it bound the port then died on a Wayland/GPU arg error (no full session env). Needs PJ to launch `obsidian --remote-debugging-port=9222` from his session; then attach via CDP and exercise `api.tables()`/`api.roll()`, the onRoll side-effects, and the `# Track: used` dedup path. Until then ISC-61 stays open.
+
 ### 2026-05-20 — Phase 1 API behavior verification
 
 Test-pass evidence via `npx jest`:
