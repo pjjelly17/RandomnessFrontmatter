@@ -47,6 +47,23 @@ export interface RandomnessSettings {
      * shuffle every time I scroll past it".
      */
     stableCodeblockSeeds: boolean;
+    /** When ON, every successful API roll appends a log line to the
+     *  current session note (resolved by sessionTypeKey/sessionTypeValue).
+     *  Default OFF — opt-in feature; silent no-op when no session note
+     *  matches. */
+    sessionAutoAppend: boolean;
+    /** Frontmatter KEY that identifies a session note (e.g. "type"). */
+    sessionTypeKey: string;
+    /** Frontmatter VALUE that identifies a session note (e.g. "session"). */
+    sessionTypeValue: string;
+    /** Whether to record every roll attempt into the vault history file. Default ON. */
+    historyEnabled: boolean;
+    /** Max history entries to keep — FIFO eviction at this cap. Default 50. */
+    historyMaxEntries: number;
+    /** Auto-mark a result as used when committed via roll-into-property. Default ON. */
+    autoMarkUsedOnRollIntoProperty: boolean;
+    /** Exclude used results when the roll-into-property command rolls. Default OFF (opt-in). */
+    excludeUsedInRollIntoProperty: boolean;
     /**
      * Paths (folders and files) the user has expanded in the generator
      * browser pane. Persisted so the tree remembers its shape across
@@ -78,13 +95,42 @@ export interface RandomnessSettings {
     pinnedTables: string[];
 }
 
+const DEFAULT_SESSION_AUTO_APPEND = false;
+const DEFAULT_SESSION_TYPE_KEY = "type";
+const DEFAULT_SESSION_TYPE_VALUE = "session";
+const DEFAULT_HISTORY_ENABLED = true;
+const DEFAULT_HISTORY_MAX_ENTRIES = 50;
+const DEFAULT_AUTO_MARK_USED_ON_ROLL_INTO_PROPERTY = true;
+const DEFAULT_EXCLUDE_USED_IN_ROLL_INTO_PROPERTY = false;
+
 export const DEFAULT_SETTINGS: RandomnessSettings = {
     generatorRoot: "",
     defaultFormatting: "html",
     stableCodeblockSeeds: false,
     browserExpandedPaths: [],
     pinnedTables: [],
+    // Session log auto-append fields. Plain enumerable properties so
+    // loadSettings()'s Object.assign({}, DEFAULT_SETTINGS, stored) merge
+    // includes them and persists user changes round-trip.
+    sessionAutoAppend: DEFAULT_SESSION_AUTO_APPEND,
+    sessionTypeKey: DEFAULT_SESSION_TYPE_KEY,
+    sessionTypeValue: DEFAULT_SESSION_TYPE_VALUE,
+    historyEnabled: DEFAULT_HISTORY_ENABLED,
+    historyMaxEntries: DEFAULT_HISTORY_MAX_ENTRIES,
+    autoMarkUsedOnRollIntoProperty:
+        DEFAULT_AUTO_MARK_USED_ON_ROLL_INTO_PROPERTY,
+    excludeUsedInRollIntoProperty:
+        DEFAULT_EXCLUDE_USED_IN_ROLL_INTO_PROPERTY,
 };
+
+function clampHistoryMaxEntries(value: unknown): number {
+    const parsedValue =
+        typeof value === "number" ? value : Number.parseInt(String(value), 10);
+    if (!Number.isFinite(parsedValue)) {
+        return DEFAULT_HISTORY_MAX_ENTRIES;
+    }
+    return Math.min(500, Math.max(10, Math.trunc(parsedValue)));
+}
 
 /**
  * Settings tab UI. The tab is registered by main.ts via
@@ -195,6 +241,147 @@ export class RandomnessSettingsTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.stableCodeblockSeeds)
                     .onChange(async (value) => {
                         this.plugin.settings.stableCodeblockSeeds = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        // Plain DOM heading rather than `containerEl.createEl(...)` so the
+        // test-suite's jsdom HTMLElement (which lacks Obsidian's createEl
+        // augmentation) renders the settings tab without throwing.
+        const sessionHeading = document.createElement("h3");
+        sessionHeading.textContent = "Session log auto-append";
+        containerEl.appendChild(sessionHeading);
+
+        new Setting(containerEl)
+            .setName("Auto-append rolls to active session note")
+            .setDesc(
+                "When on, every roll is appended as a one-line entry to the " +
+                    "most-recent session note. Looks for notes whose " +
+                    "frontmatter has the key/value below."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings.sessionAutoAppend ??
+                            DEFAULT_SETTINGS.sessionAutoAppend
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.sessionAutoAppend = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Session note frontmatter key")
+            .setDesc("Frontmatter key that identifies a session note.")
+            .addText((text) =>
+                text
+                    .setPlaceholder(DEFAULT_SESSION_TYPE_KEY)
+                    .setValue(
+                        this.plugin.settings.sessionTypeKey ??
+                            DEFAULT_SETTINGS.sessionTypeKey
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.sessionTypeKey = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Session note frontmatter value")
+            .setDesc(
+                "Frontmatter value at that key that marks a session note."
+            )
+            .addText((text) =>
+                text
+                    .setPlaceholder(DEFAULT_SESSION_TYPE_VALUE)
+                    .setValue(
+                        this.plugin.settings.sessionTypeValue ??
+                            DEFAULT_SETTINGS.sessionTypeValue
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.sessionTypeValue = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        const historyHeading = document.createElement("h3");
+        historyHeading.textContent = "Roll history";
+        containerEl.appendChild(historyHeading);
+
+        new Setting(containerEl)
+            .setName("Record roll history")
+            .setDesc(
+                "Record every roll into _rolls/history.md in the vault. Disable for a no-trace mode."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings.historyEnabled ??
+                            DEFAULT_SETTINGS.historyEnabled
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.historyEnabled = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Maximum history entries")
+            .setDesc("Maximum history entries (oldest dropped when full).")
+            .addText((text) =>
+                text
+                    .setPlaceholder(String(DEFAULT_HISTORY_MAX_ENTRIES))
+                    .setValue(
+                        String(
+                            this.plugin.settings.historyMaxEntries ??
+                                DEFAULT_SETTINGS.historyMaxEntries
+                        )
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.historyMaxEntries =
+                            clampHistoryMaxEntries(value);
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        const usedHeading = document.createElement("h3");
+        usedHeading.textContent = "Used / Unused state";
+        containerEl.appendChild(usedHeading);
+
+        new Setting(containerEl)
+            .setName("Auto-mark rolls committed to properties")
+            .setDesc(
+                "When you roll a table into a frontmatter property, automatically add that result to the used set."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings
+                            .autoMarkUsedOnRollIntoProperty ??
+                            DEFAULT_SETTINGS.autoMarkUsedOnRollIntoProperty
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.autoMarkUsedOnRollIntoProperty =
+                            value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Exclude used on roll-into-property")
+            .setDesc(
+                "When rolling into a frontmatter property, skip results that are already in the used set (re-rolls up to 20 times). When all results are used, falls back to the last attempt."
+            )
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(
+                        this.plugin.settings.excludeUsedInRollIntoProperty ??
+                            DEFAULT_SETTINGS.excludeUsedInRollIntoProperty
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.excludeUsedInRollIntoProperty =
+                            value;
                         await this.plugin.saveSettings();
                     })
             );

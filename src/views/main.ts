@@ -35,6 +35,15 @@ import {
 import { TableAutocomplete } from "./tableAutocomplete";
 import { createApi, RandomnessAPI } from "../api";
 import { VaultIndex } from "../resolver/vaultIndex";
+import {
+    RollHistoryView,
+    VIEW_TYPE_ROLL_HISTORY,
+    openRollHistoryView,
+} from "./rollHistoryView";
+import { registerRollIntoPropertyCommand } from "./rollIntoPropertyCommand";
+import { registerQuickRollCommand } from "./quickRollCommand";
+import { appendRollToSessionNote } from "./sessionLogAppender";
+import { appendRollToHistory } from "./rollHistoryService";
 
 export default class RandomnessPlugin extends Plugin {
     settings: RandomnessSettings = DEFAULT_SETTINGS;
@@ -153,6 +162,27 @@ export default class RandomnessPlugin extends Plugin {
         // app.plugins.plugins["randomness"].api. See src/api/index.ts.
         this.api = createApi(this);
 
+        // ─── Randomness Frontmatter feature layer ───
+        // Rolls are data events: every roll fires side-effects that
+        // append to the current session note (if enabled) and to the
+        // roll-history store. Both bail fast when their toggle is off.
+        // this.register() unsubscribes the listeners on plugin disable.
+        this.register(
+            this.api.onRoll((result) => {
+                void appendRollToSessionNote(this, result);
+            })
+        );
+        this.register(
+            this.api.onRoll((result) => {
+                void appendRollToHistory(this, result);
+            })
+        );
+
+        this.registerView(
+            VIEW_TYPE_ROLL_HISTORY,
+            (leaf) => new RollHistoryView(leaf, this)
+        );
+
         this.addSettingTab(new RandomnessSettingsTab(this.app, this));
 
         // ─── Commands ───
@@ -185,6 +215,15 @@ export default class RandomnessPlugin extends Plugin {
                 })();
             },
         });
+
+        // ─── Randomness Frontmatter feature commands ───
+        this.addCommand({
+            id: "open-roll-history",
+            name: "Open roll history",
+            callback: () => void openRollHistoryView(this),
+        });
+        registerRollIntoPropertyCommand(this);
+        registerQuickRollCommand(this);
     }
 
     async onunload(): Promise<void> {

@@ -148,6 +148,13 @@ describe("settings: defaults", () => {
             stableCodeblockSeeds: false,
             browserExpandedPaths: [],
             pinnedTables: [],
+            sessionAutoAppend: false,
+            sessionTypeKey: "type",
+            sessionTypeValue: "session",
+            historyEnabled: true,
+            historyMaxEntries: 50,
+            autoMarkUsedOnRollIntoProperty: true,
+            excludeUsedInRollIntoProperty: false,
         });
     });
 });
@@ -165,6 +172,7 @@ describe("settings: load merge", () => {
     test("fully-stored settings round-trip cleanly", async () => {
         const p = fakePlugin();
         p.settings = {
+            ...DEFAULT_SETTINGS,
             generatorRoot: "Generators",
             defaultFormatting: "text",
             stableCodeblockSeeds: true,
@@ -174,6 +182,7 @@ describe("settings: load merge", () => {
         await p.saveSettings();
         await p.loadSettings();
         expect(p.settings).toEqual({
+            ...DEFAULT_SETTINGS,
             generatorRoot: "Generators",
             defaultFormatting: "text",
             stableCodeblockSeeds: true,
