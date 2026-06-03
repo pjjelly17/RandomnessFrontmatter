@@ -2,7 +2,7 @@
 project: randomness-frontmatter
 effort: E3
 phase: verify
-progress: 54/56
+progress: 60/62
 mode: build
 started: 2026-05-20
 updated: 2026-06-03
@@ -156,7 +156,14 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - [x] ISC-53: Anti: upstream `src/api/index.ts`, `src/resolver/vaultIndex.ts`, 1.0.11 features untouched — diff empty
 - [x] ISC-54: Anti: zero AI/LLM deps after merge — grep package.json clean
 - [ ] ISC-55: Antecedent: `main` NOT yet moved to branch — pending PJ smoke test in NoStone5e (correct gate; build+tests green but quickRoll + rollIntoProperty commands are UI-modal, never unit-tested in fork either)
-- [ ] ISC-56: [NEXT] continue Phase 2 feature work ("the plan changes") — not started; gated on re-port smoke verification
+### Phase 2 — `# Track: used` per-table dedup directive (2026-06-03, was deferred ISC-36)
+- [x] ISC-56: `# Track: used` comment-channel directive recognized by `src/views/trackDirective.ts` (`fileDeclaresUsedTracking` / `lineDeclaresUsedTracking`); file-level scope; tolerant of `#`/`;`/`//` prefix, whitespace, case
+- [x] ISC-57: Directive forces exclude-used + auto-mark in roll-into-property, OR'd with the global settings (`excludeUsedInRollIntoProperty || tracked`, `autoMarkUsedOnRollIntoProperty || tracked`) — per-table control the global setting can't express
+- [x] ISC-58: Anti: engine UNTOUCHED — directive rides the comment channel (`fileParser.ts:64` skips `#`/`;`/`//`); no fileParser/ast/evaluator edits; preserves the re-port's decoupling + upstream backwards-compat
+- [x] ISC-59: Anti: matcher rejects near-misses (`Tracker:`, `Track: unused`, missing colon, non-comment `Track: used`, item content) — `trackDirective.test.ts` covers 6 positives + 7 negatives
+- [x] ISC-60: Build clean; full suite 977 tests / 40 suites green via `npx jest`
+- [ ] ISC-61: Antecedent: smoke-verify in NoStone5e — add `# Track: used` to a real .ipt, roll-into-property twice, confirm no repeat + entry lands in `_rolls/used.md`
+- [ ] ISC-62: [DEFERRED] quick-roll directive integration + table-level (not file-level) scope — future refinement, intentionally out of this slice
 
 ## Test Strategy
 

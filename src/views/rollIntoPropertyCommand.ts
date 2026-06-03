@@ -34,6 +34,7 @@ import type RandomnessPlugin from "./main";
 import type { TableSource } from "../api";
 import { ensureUseInSource } from "./useInjection";
 import { isUsed, markUsed } from "./usedTracker";
+import { fileDeclaresUsedTracking } from "./trackDirective";
 
 class TableSuggestModal extends SuggestModal<TableSource> {
     constructor(
@@ -234,9 +235,23 @@ export function registerRollIntoPropertyCommand(
                             // write live here in the command layer now (they
                             // only need the public roll() + Obsidian's
                             // processFrontMatter).
+                            // A table file may opt itself into dedup via
+                            // a `# Track: used` comment, overriding the
+                            // global setting (per-table control the
+                            // setting can't express). The directive forces
+                            // BOTH exclude-used and auto-mark on.
+                            const tracked =
+                                await fileDeclaresUsedTracking(
+                                    plugin,
+                                    picked.filePath
+                                );
+
                             let rollResult = await plugin.api.roll(picked.name);
                             let allUsed = false;
-                            if (plugin.settings.excludeUsedInRollIntoProperty) {
+                            if (
+                                plugin.settings.excludeUsedInRollIntoProperty ||
+                                tracked
+                            ) {
                                 let attempts = 0;
                                 while (
                                     await isUsed(
@@ -263,7 +278,8 @@ export function registerRollIntoPropertyCommand(
                             );
 
                             if (
-                                plugin.settings.autoMarkUsedOnRollIntoProperty
+                                plugin.settings.autoMarkUsedOnRollIntoProperty ||
+                                tracked
                             ) {
                                 await markUsed(
                                     plugin,
