@@ -2,10 +2,10 @@
 project: randomness-frontmatter
 effort: E3
 phase: verify
-progress: 60/62
+progress: 72/72
 mode: build
 started: 2026-05-20
-updated: 2026-06-03
+updated: 2026-06-06
 upstream: Obsidian-TTRPG-Community/Randomness
 fork_baseline: 1.0.11
 prior_baseline: 0.4.4
@@ -155,15 +155,41 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - [x] ISC-52: 962 tests / 39 suites green via `npx jest`; fork API test dropped, 3 feature tests (session/history/used) ported + passing
 - [x] ISC-53: Anti: upstream `src/api/index.ts`, `src/resolver/vaultIndex.ts`, 1.0.11 features untouched — diff empty
 - [x] ISC-54: Anti: zero AI/LLM deps after merge — grep package.json clean
-- [ ] ISC-55: Antecedent: `main` NOT yet moved to branch — pending PJ smoke test in NoStone5e (correct gate; build+tests green but quickRoll + rollIntoProperty commands are UI-modal, never unit-tested in fork either)
+- [x] ISC-55: Antecedent: smoke test passed in NoStone5e 2026-06-06 — sidebar roll, quick-roll palette, roll-into-property, roll history mark/unmark, excludeUsed all verified; `main` is the live branch
 ### Phase 2 — `# Track: used` per-table dedup directive (2026-06-03, was deferred ISC-36)
 - [x] ISC-56: `# Track: used` comment-channel directive recognized by `src/views/trackDirective.ts` (`fileDeclaresUsedTracking` / `lineDeclaresUsedTracking`); file-level scope; tolerant of `#`/`;`/`//` prefix, whitespace, case
 - [x] ISC-57: Directive forces exclude-used + auto-mark in roll-into-property, OR'd with the global settings (`excludeUsedInRollIntoProperty || tracked`, `autoMarkUsedOnRollIntoProperty || tracked`) — per-table control the global setting can't express
 - [x] ISC-58: Anti: engine UNTOUCHED — directive rides the comment channel (`fileParser.ts:64` skips `#`/`;`/`//`); no fileParser/ast/evaluator edits; preserves the re-port's decoupling + upstream backwards-compat
 - [x] ISC-59: Anti: matcher rejects near-misses (`Tracker:`, `Track: unused`, missing colon, non-comment `Track: used`, item content) — `trackDirective.test.ts` covers 6 positives + 7 negatives
 - [x] ISC-60: Build clean; full suite 977 tests / 40 suites green via `npx jest`
-- [ ] ISC-61: Antecedent: smoke-verify in NoStone5e — add `# Track: used` to a real .ipt, roll-into-property twice, confirm no repeat + entry lands in `_rolls/used.md`
-- [ ] ISC-62: [DEFERRED] quick-roll directive integration + table-level (not file-level) scope — future refinement, intentionally out of this slice
+- [x] ISC-61: Smoke-verified in NoStone5e 2026-06-06 — `# Track: used` directive + roll-into-property + used file logging all confirmed working
+- [x] ISC-62: Quick-roll directive integration shipped 2026-06-06 (see Phase 3); table-level scope remains deferred
+
+### Phase 5 — Per-campaign used dedup (2026-06-06)
+- [x] ISC-69: `activeCampaign: string` setting added (default `""`) — when non-empty, used results route to `_rolls/used-{slug}.md` instead of `_rolls/used.md`
+- [x] ISC-70: `campaignSlugFor(name)` pure function in `usedTracker.ts` — lowercases, strips apostrophes (straight + curly + backtick), collapses non-alphanumeric runs to hyphens, trims leading/trailing hyphens
+- [x] ISC-71: `usedFilePathFor(plugin)` reads `plugin.settings.activeCampaign`; all `loadUsed`/`markUsed`/`unmarkUsed` calls route through it — call sites unchanged
+- [x] ISC-72: Settings UI text field "Active campaign" added after excludeUsed toggle; 10 new unit tests; full suite 1000 tests / 40 suites green; build clean
+
+### Phase 4 — Table-level `# Track: used` scope (2026-06-06)
+- [x] ISC-66: `sourceTableDeclaresUsedTracking(src, tableName)` pure function in `trackDirective.ts` — returns true if directive in target table's block OR at file-level scope (before any `Table:`, or after `EndTable`); case-insensitive table name match; handles inline `//` on Table: lines
+- [x] ISC-67: `tableDeclaresUsedTracking(plugin, filePath, tableName)` async vault wrapper replacing `fileDeclaresUsedTracking` at all three call sites (`browserView`, `quickRollCommand`, `rollIntoPropertyCommand`) — directive in "Weapons" no longer opts in "Names"
+- [x] ISC-68: 9 new unit tests in `trackDirective.test.ts`; full suite 986 tests / 40 suites green; build clean
+
+### Phase 3 — Used tracking across all roll surfaces (2026-06-06)
+- [x] ISC-63: `browserView.ts` `roll()` calls `markUsed(tableName, result)` after successful roll, gated on `fileDeclaresUsedTracking(gen.path) || autoMarkUsedOnRollIntoProperty` — same conditions as rollIntoProperty
+- [x] ISC-64: `quickRollCommand.ts` `onChooseSuggestion` calls `markUsed(result.table, result.result)` after successful roll, gated on `fileDeclaresUsedTracking(item.filePath) || autoMarkUsedOnRollIntoProperty`
+- [x] ISC-65: Build clean; smoke-verified in NoStone5e 2026-06-06 — sidebar roll and quick-roll both write to `_rolls/used.md`; dedup idempotent (same result twice = one entry); non-tracked tables skip the write correctly
+
+## Future Ideas (no ISC yet)
+
+- ~~Table-level `# Track: used` scope~~ — SHIPPED 2026-06-06 (ISC-66–68)
+- ~~Per-campaign / folder-based dedup~~ — SHIPPED 2026-06-06 (ISC-69–72)
+- **Mobile-friendly sidebar layout** — camping/away-from-desk DM use; current layout is desktop-only
+- **`rollUnscoped` retry efficiency** — exclude-used retry re-prefetches Use: graph each attempt (up to 20×); hot path but acceptable for v0.2
+- **`bun.lock` + `package-lock.json` both committed** — going-bun-only cleanup is a one-liner, never been the priority
+- **Companion-plugin path** — thin plugin riding upstream's public API instead of fork; keeps the option open, PJ chose fork-for-now
+- **Live Preview (CodeMirror 6)** — PJ uses Reading + Source only; not a real need until that changes
 
 ## Test Strategy
 
@@ -175,6 +201,7 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 | ISC-22–26 | session log | toggle on, roll, read session note | append line present with HH:MM + result | Read vault file |
 | ISC-27–32 | history | roll N times, inspect jsonl | line count + JSON shape | Read `_rolls/history.jsonl` |
 | ISC-33–36 | used state | mark used, re-roll with excludeUsed | result not in returned distribution | manual; future tests |
+| ISC-63–65 | used tracking | roll from sidebar + quick-roll + track directive | entry in `_rolls/used.md`; no dup | manual smoke |
 | ISC-37 | upstream compat | existing `rdm:[@Faction]` still rolls | unchanged behavior | Read vault note |
 | ISC-38 | dependencies | grep package.json + lockfile | zero AI deps | Grep |
 | ISC-39 | format | sample `.ipt` parses identically | unchanged AST | jest test in `__tests__/integration/` |
@@ -190,6 +217,7 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 | session-log-append | ISC-22–26 | public-api | yes (after api) |
 | roll-history | ISC-27–32 | public-api | yes (after api) |
 | used-unused-state | ISC-33–36 | public-api, roll-history | no (needs history) |
+| used-tracking-all-surfaces | ISC-63–65 | used-unused-state, track-directive | yes |
 | upstream-pr-api | upstream contribution | public-api | no |
 
 ## Decisions
@@ -210,7 +238,11 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - 2026-06-03: **Plugin id stays `randomness-frontmatter`.** Distinct from upstream `randomness` to avoid the codeblock/view-id collision ([[reference-obsidian-plugin-id-collision]]). Intended deployment: fork REPLACES upstream `randomness` in NoStone5e (fork = upstream 1.0.11 + feature layer, so one plugin suffices). PJ to confirm uninstalling upstream `randomness` to avoid running both. version → 0.2.0.
 
 - 2026-06-03: **Re-port executed by primary (Forge run detached without writing).** Forge spawned for the mechanical port returned only a monitor banner, no file writes landed; primary did the port directly — surgical given the small base drift. Files: `settings.ts`+`tableAutocomplete.ts` taken from fork wholesale (upstream unchanged); `inlineProcessor.ts` left as upstream's (fork's change was rollUnscoped support, now native upstream); `main.ts` 3-way merged; `quickRollCommand.ts`+`rollIntoPropertyCommand.ts` adapted to upstream API; manifest/package re-identified. Result: build clean, 962 tests / 39 suites green.
+- 2026-06-06: **Used tracking extended to all roll surfaces.** `browserView.ts` and `quickRollCommand.ts` both lacked `markUsed()` calls — sidebar rolls and quick-roll palette results were silently not written to `_rolls/used.md`. Root cause: `markUsed` was only wired in `rollIntoPropertyCommand`. Fix: imported `markUsed` + `fileDeclaresUsedTracking` into both files; call site mirrors the rollIntoProperty gate (`tracked || autoMarkUsedOnRollIntoProperty`). Table name passed as `tableName` (sidebar) and `result.table` (quick-roll, from API RollResult). Build clean; smoke-verified.
+
 - 2026-06-03: **Advisor (commitment-boundary) flagged the test gap honestly.** quickRoll (PJ's daily driver) + the re-homed rollIntoPropertyCommand have NO dedicated unit tests — but neither did the fork (both were always smoke-verified). The re-port did NOT regress coverage; the 3 feature files that had tests (session/history/used) still do. The one genuinely-NEW testable bit is the exclude-used retry now living in the command layer. Decision: do NOT overclaim "done"; hand back with the gap scoped in the same breath as the 962; smoke test is the established verification path for these UI commands; offer a focused exclude-used unit test as a quick follow-up. Main NOT promoted (ISC-55 gate held correctly).
+
+- 2026-07-14: **Re-port onto upstream 1.6.0 — DECIDED, not yet executed.** Upstream raced 1.1.1→1.6.0 (~5 wks): 1.3.0 Dice Roller merge (absorbed the discontinued Dice Roller plugin + Fantasy Statblocks/Initiative Tracker), 1.4.0 decks, 1.5.0 frontmatter tag-filtering, 1.6.0 dice breakdown/decks/portraits. **Decision: keep the fork, re-port onto 1.6.0** — everything PJ values is core-engine (dice + `.ipt` generators, free with the re-port) or the fork-only data layer (kept); folding to stock upstream loses the data layer; the Dice Roller merge + 1.3.x engine fixes are the upstream parts he wants and are only at 1.3.0+. Portraits/decks = don't care, tag along inert. **Sizing recon (read-only): the 8 feature files couple to upstream via type-only `RollResult`+`TableSource` imports ONLY — both intact in 1.6.0 — so files drop in near-clean; real work = 3-way merges of `main.ts` (additive onload re-wire) + `settings.ts` (7 fork keys into upstream's grown settings) + manifest/package re-identify (v0.3.0).** Bigger than the 0.4.4→1.0.11 hop (crosses the Dice Roller merge) but bounded/mechanical. Full step-by-step + gotchas in [`RE-PORT-1.6.0-PLAN.md`](RE-PORT-1.6.0-PLAN.md). NOT executed — decision + sizing only, PJ-timed.
 
 ## Changelog
 
@@ -222,6 +254,14 @@ Ship v0.1 of `randomness-frontmatter` with all 6 Phase 1 Foundation items implem
 - **criterion_now:** ISCs claiming behavioral contracts (return shapes, error paths, event emissions, side effects) MUST cite a test-pass probe (`bun run test` line + assertion), not a code-Read probe. Code-Read remains valid for ISCs about file existence, signature, or type-level claims.
 
 ## Verification
+
+### 2026-06-06 — Phase 3: used tracking all surfaces
+
+- **Root cause found:** `markUsed` missing from `browserView.ts` `roll()` and `quickRollCommand.ts` `onChooseSuggestion`.
+- **Fix:** added `markUsed` + `fileDeclaresUsedTracking` imports to both files; call gated on `tracked || autoMarkUsedOnRollIntoProperty`.
+- **Build:** `bun run build` clean.
+- **Smoke:** sidebar roll → `_rolls/used.md` entry confirmed; quick-roll → entry confirmed; dedup (same result twice = one line) confirmed; non-tracked table with setting OFF → no write confirmed.
+- **ISC-55, ISC-61, ISC-62 closed.** ISC-63–65 added and closed same session.
 
 ### 2026-06-03 — re-port + directive: build/test verified, runtime smoke IN PROGRESS
 
