@@ -154,6 +154,14 @@ describe("settings: defaults", () => {
             graphicalDice: true,
             showDiceBreakdown: false,
             collapsedDecks: [],
+            sessionAutoAppend: false,
+            sessionTypeKey: "type",
+            sessionTypeValue: "session",
+            historyEnabled: true,
+            historyMaxEntries: 50,
+            autoMarkUsedOnRollIntoProperty: true,
+            excludeUsedInRollIntoProperty: false,
+            activeCampaign: "",
         });
     });
 });
@@ -183,6 +191,14 @@ describe("settings: load merge", () => {
             graphicalDice: false,
             showDiceBreakdown: false,
             collapsedDecks: [],
+            sessionAutoAppend: true,
+            sessionTypeKey: "kind",
+            sessionTypeValue: "game-session",
+            historyEnabled: false,
+            historyMaxEntries: 100,
+            autoMarkUsedOnRollIntoProperty: false,
+            excludeUsedInRollIntoProperty: true,
+            activeCampaign: "Glasstaff",
         };
         await p.saveSettings();
         await p.loadSettings();
@@ -199,6 +215,14 @@ describe("settings: load merge", () => {
             graphicalDice: false,
             showDiceBreakdown: false,
             collapsedDecks: [],
+            sessionAutoAppend: true,
+            sessionTypeKey: "kind",
+            sessionTypeValue: "game-session",
+            historyEnabled: false,
+            historyMaxEntries: 100,
+            autoMarkUsedOnRollIntoProperty: false,
+            excludeUsedInRollIntoProperty: true,
+            activeCampaign: "Glasstaff",
         });
     });
 

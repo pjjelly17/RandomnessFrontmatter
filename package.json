@@ -1,7 +1,7 @@
 {
-  "name": "randomness",
-  "version": "1.6.0",
-  "description": "Random generator engine for Obsidian (.rdm generators)",
+  "name": "randomness-frontmatter",
+  "version": "0.3.0",
+  "description": "Randomness fork — rolls as structured data events (frontmatter writes, used-tracking, session log, roll history) on top of the upstream .rdm engine",
   "main": "main.js",
   "scripts": {
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",

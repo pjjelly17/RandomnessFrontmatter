@@ -45,6 +45,16 @@ import { buildPortraitInlineProcessor } from "../portrait/inline";
 import { DeckService } from "../decks/deckService";
 import { buildDeckInlineProcessor } from "./deckInlineProcessor";
 import { FuzzySuggestModal } from "obsidian";
+// ─── Randomness Frontmatter feature layer (fork additions) ───
+import {
+    RollHistoryView,
+    VIEW_TYPE_ROLL_HISTORY,
+    openRollHistoryView,
+} from "./rollHistoryView";
+import { registerRollIntoPropertyCommand } from "./rollIntoPropertyCommand";
+import { registerQuickRollCommand } from "./quickRollCommand";
+import { appendRollToSessionNote } from "./sessionLogAppender";
+import { appendRollToHistory } from "./rollHistoryService";
 
 export default class RandomnessPlugin extends Plugin {
     settings: RandomnessSettings = DEFAULT_SETTINGS;
@@ -199,6 +209,26 @@ export default class RandomnessPlugin extends Plugin {
         // app.plugins.plugins["randomness"].api. See src/api/index.ts.
         this.api = createApi(this);
 
+        // ─── Randomness Frontmatter feature layer ───
+        // Rolls are data events: every roll fires side-effects that
+        // append to the current session note (if enabled) and to the
+        // roll-history store. Both bail fast when their toggle is off.
+        // this.register() unsubscribes the listeners on plugin disable.
+        this.register(
+            this.api.onRoll((result) => {
+                void appendRollToSessionNote(this, result);
+            })
+        );
+        this.register(
+            this.api.onRoll((result) => {
+                void appendRollToHistory(this, result);
+            })
+        );
+        this.registerView(
+            VIEW_TYPE_ROLL_HISTORY,
+            (leaf) => new RollHistoryView(leaf, this)
+        );
+
         // Dice Roller API shim: lets plugins that integrate through
         // window.DiceRoller (Fantasy Statblocks & co.) keep their
         // dice once the standalone plugin is retired. No-op while
@@ -293,6 +323,15 @@ export default class RandomnessPlugin extends Plugin {
                 })();
             },
         });
+
+        // ─── Randomness Frontmatter feature commands ───
+        this.addCommand({
+            id: "open-roll-history",
+            name: "Open roll history",
+            callback: () => void openRollHistoryView(this),
+        });
+        registerRollIntoPropertyCommand(this);
+        registerQuickRollCommand(this);
     }
 
     onunload(): void {
