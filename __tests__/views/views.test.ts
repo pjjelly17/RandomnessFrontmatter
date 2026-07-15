@@ -155,6 +155,7 @@ describe("settings: defaults", () => {
             historyMaxEntries: 50,
             autoMarkUsedOnRollIntoProperty: true,
             excludeUsedInRollIntoProperty: false,
+            activeCampaign: "",
         });
     });
 });

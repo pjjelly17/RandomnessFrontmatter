@@ -10,10 +10,33 @@ export interface UsedEntry {
     markedAt: string;
 }
 
-/** Canonical markdown file that stores the vault-global used set. */
+/** Canonical markdown file for the vault-global (no campaign) used set. */
 export const USED_FILE_PATH = "_rolls/used.md";
 
 const USED_FOLDER_PATH = "_rolls";
+
+/**
+ * Slugify a campaign name into a safe filename component.
+ * "Glasstaff's Grand Design" → "glasstaffs-grand-design"
+ */
+export function campaignSlugFor(name: string): string {
+    return name
+        .trim()
+        .toLowerCase()
+        .replace(/['‘’ʼʻ`]/g, "")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+}
+
+/**
+ * Return the vault path for the used file, scoped to the active campaign.
+ * Empty slug → vault-global `_rolls/used.md`.
+ */
+export function usedFilePathFor(plugin: RandomnessPlugin): string {
+    const name = plugin.settings.activeCampaign ?? "";
+    const slug = campaignSlugFor(name);
+    return slug ? `_rolls/used-${slug}.md` : USED_FILE_PATH;
+}
 const USED_FILE_HEADER = "# Used Roll Results\n\n";
 
 /**
@@ -160,16 +183,17 @@ async function queueUsedWrite(
     }
 }
 
-/** Load all used entries. Empty array if file missing or unparseable. */
+/** Load all used entries for the active campaign. Empty array if file missing or unparseable. */
 export async function loadUsed(
     plugin: RandomnessPlugin
 ): Promise<UsedEntry[]> {
+    const filePath = usedFilePathFor(plugin);
     try {
-        if (!(await plugin.app.vault.adapter.exists(USED_FILE_PATH))) {
+        if (!(await plugin.app.vault.adapter.exists(filePath))) {
             return [];
         }
 
-        const source = await plugin.app.vault.adapter.read(USED_FILE_PATH);
+        const source = await plugin.app.vault.adapter.read(filePath);
         const entries: UsedEntry[] = [];
         for (const line of source.split("\n")) {
             const trimmed = line.trim();
@@ -223,6 +247,7 @@ export async function markUsed(
     table: string,
     result: string
 ): Promise<void> {
+    const filePath = usedFilePathFor(plugin);
     const key = usedKeyFor(table, result);
     try {
         await queueUsedWrite(plugin, async () => {
@@ -239,7 +264,7 @@ export async function markUsed(
             });
             await ensureUsedFolder(plugin);
             await plugin.app.vault.adapter.write(
-                USED_FILE_PATH,
+                filePath,
                 serializeAllEntries(entries)
             );
         });
@@ -257,6 +282,7 @@ export async function unmarkUsed(
     table: string,
     result: string
 ): Promise<void> {
+    const filePath = usedFilePathFor(plugin);
     const key = usedKeyFor(table, result);
     try {
         await queueUsedWrite(plugin, async () => {
@@ -270,7 +296,7 @@ export async function unmarkUsed(
             );
             await ensureUsedFolder(plugin);
             await plugin.app.vault.adapter.write(
-                USED_FILE_PATH,
+                filePath,
                 serializeAllEntries(remainingEntries)
             );
         });

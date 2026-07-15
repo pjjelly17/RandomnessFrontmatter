@@ -65,6 +65,12 @@ export interface RandomnessSettings {
     /** Exclude used results when the roll-into-property command rolls. Default OFF (opt-in). */
     excludeUsedInRollIntoProperty: boolean;
     /**
+     * Active campaign name. When non-empty, used results are stored in
+     * `_rolls/used-{slug}.md` instead of the vault-global `_rolls/used.md`,
+     * keeping Lilly and Glasstaff dedup sets separate. Empty = global.
+     */
+    activeCampaign: string;
+    /**
      * Paths (folders and files) the user has expanded in the generator
      * browser pane. Persisted so the tree remembers its shape across
      * Obsidian reloads — start collapsed, expand what you use, the
@@ -121,6 +127,7 @@ export const DEFAULT_SETTINGS: RandomnessSettings = {
         DEFAULT_AUTO_MARK_USED_ON_ROLL_INTO_PROPERTY,
     excludeUsedInRollIntoProperty:
         DEFAULT_EXCLUDE_USED_IN_ROLL_INTO_PROPERTY,
+    activeCampaign: "",
 };
 
 function clampHistoryMaxEntries(value: unknown): number {
@@ -382,6 +389,24 @@ export class RandomnessSettingsTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.excludeUsedInRollIntoProperty =
                             value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Active campaign")
+            .setDesc(
+                "Name of the current campaign (e.g. \"Glasstaff\" or \"Lilly\"). Used results are stored in _rolls/used-{name}.md so each campaign tracks its own dedup set. Leave blank to use the shared vault-global used list."
+            )
+            .addText((text) =>
+                text
+                    .setPlaceholder("e.g. Glasstaff")
+                    .setValue(
+                        this.plugin.settings.activeCampaign ??
+                            DEFAULT_SETTINGS.activeCampaign
+                    )
+                    .onChange(async (value) => {
+                        this.plugin.settings.activeCampaign = value.trim();
                         await this.plugin.saveSettings();
                     })
             );

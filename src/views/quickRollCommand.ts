@@ -14,6 +14,8 @@
 
 import { Notice, SuggestModal, TFile } from "obsidian";
 import type { TableSource } from "../api";
+import { markUsed } from "./usedTracker";
+import { tableDeclaresUsedTracking } from "./trackDirective";
 import type RandomnessPlugin from "./main";
 
 function truncate(s: string, n: number): string {
@@ -82,6 +84,11 @@ class QuickRollSuggestModal extends SuggestModal<TableSource> {
             }
 
             new Notice(`[@${item.name}] → ${truncate(result.result, 120)}`);
+
+            const tracked = await tableDeclaresUsedTracking(this.plugin, item.filePath, item.name);
+            if (this.plugin.settings.autoMarkUsedOnRollIntoProperty || tracked) {
+                await markUsed(this.plugin, result.table, result.result);
+            }
         } catch (error: unknown) {
             const message =
                 error instanceof Error ? error.message : String(error);

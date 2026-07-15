@@ -48,6 +48,8 @@ import {
     FAVOURITES_PATH,
     FAVOURITES_NAME,
 } from "./pinnedTables";
+import { markUsed } from "./usedTracker";
+import { tableDeclaresUsedTracking } from "./trackDirective";
 import type RandomnessPlugin from "./main";
 
 export const VIEW_TYPE_BROWSER = "randomness-browser-view";
@@ -728,6 +730,11 @@ export class BrowserView extends ItemView {
                 sourcePath: gen.path,
             };
             this.renderResult();
+
+            const tracked = await tableDeclaresUsedTracking(this.plugin, gen.path, tableName);
+            if (this.plugin.settings.autoMarkUsedOnRollIntoProperty || tracked) {
+                await markUsed(this.plugin, tableName, result);
+            }
         } catch (err) {
             new Notice(
                 `Randomness: roll failed — ${

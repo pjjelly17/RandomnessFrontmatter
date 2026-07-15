@@ -34,7 +34,7 @@ import type RandomnessPlugin from "./main";
 import type { TableSource } from "../api";
 import { ensureUseInSource } from "./useInjection";
 import { isUsed, markUsed } from "./usedTracker";
-import { fileDeclaresUsedTracking } from "./trackDirective";
+import { tableDeclaresUsedTracking } from "./trackDirective";
 
 class TableSuggestModal extends SuggestModal<TableSource> {
     constructor(
@@ -241,9 +241,10 @@ export function registerRollIntoPropertyCommand(
                             // setting can't express). The directive forces
                             // BOTH exclude-used and auto-mark on.
                             const tracked =
-                                await fileDeclaresUsedTracking(
+                                await tableDeclaresUsedTracking(
                                     plugin,
-                                    picked.filePath
+                                    picked.filePath,
+                                    picked.name
                                 );
 
                             let rollResult = await plugin.api.roll(picked.name);

@@ -9,6 +9,8 @@ import {
     unmarkUsed,
     usedKeyFor,
     USED_FILE_PATH,
+    campaignSlugFor,
+    usedFilePathFor,
 } from "../../src/views/usedTracker";
 import {
     DEFAULT_SETTINGS,
@@ -137,5 +139,62 @@ describe("usedTracker", () => {
         await markUsed(plugin as never, "Plant", "Anise oil");
 
         expect(files.has(USED_FILE_PATH)).toBe(true);
+    });
+});
+
+describe("campaignSlugFor", () => {
+    test.each([
+        ["Glasstaff", "glasstaff"],
+        ["Lilly", "lilly"],
+        ["Glasstaff's Grand Design", "glasstaffs-grand-design"],
+        ["Glasstaff’s Grand Design", "glasstaffs-grand-design"],
+        ["My Campaign 2", "my-campaign-2"],
+        ["  padded  ", "padded"],
+        ["", ""],
+        ["---", ""],
+        ["NoStone5e", "nostone5e"],
+    ])("slugifies %j → %j", (input, expected) => {
+        expect(campaignSlugFor(input)).toBe(expected);
+    });
+});
+
+describe("usedFilePathFor", () => {
+    test("returns USED_FILE_PATH when activeCampaign is empty", () => {
+        const plugin = { settings: makeSettings({ activeCampaign: "" }) };
+        expect(usedFilePathFor(plugin as never)).toBe(USED_FILE_PATH);
+    });
+
+    test("returns campaign-scoped path for a named campaign", () => {
+        const plugin = { settings: makeSettings({ activeCampaign: "Glasstaff" }) };
+        expect(usedFilePathFor(plugin as never)).toBe("_rolls/used-glasstaff.md");
+    });
+
+    test("slugifies the campaign name in the path", () => {
+        const plugin = { settings: makeSettings({ activeCampaign: "Glasstaff's Grand Design" }) };
+        expect(usedFilePathFor(plugin as never)).toBe("_rolls/used-glasstaffs-grand-design.md");
+    });
+});
+
+describe("usedTracker with activeCampaign", () => {
+    test("markUsed writes to the campaign-scoped file", async () => {
+        const { plugin, files } = makePlugin({ settings: { activeCampaign: "Glasstaff" } });
+
+        await markUsed(plugin as never, "Names", "Aldric");
+
+        expect(files.has("_rolls/used-glasstaff.md")).toBe(true);
+        expect(files.has(USED_FILE_PATH)).toBe(false);
+    });
+
+    test("isUsed is scoped — Glasstaff entry not visible in Lilly campaign", async () => {
+        const { plugin, files } = makePlugin({ settings: { activeCampaign: "Glasstaff" } });
+        await markUsed(plugin as never, "Names", "Aldric");
+
+        // Switch campaign
+        plugin.settings.activeCampaign = "Lilly";
+        expect(await isUsed(plugin as never, "Names", "Aldric")).toBe(false);
+
+        // Switch back
+        plugin.settings.activeCampaign = "Glasstaff";
+        expect(await isUsed(plugin as never, "Names", "Aldric")).toBe(true);
     });
 });
