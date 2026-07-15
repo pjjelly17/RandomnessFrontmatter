@@ -1,4 +1,9 @@
-# Randomness
+# Randomness-Frontmatter
+---
+
+This is a fork ofr the Randomness plugin with a frontmatter addin for personal needs, other wise its a clone.
+
+---
 
 Dice, random tables, and full random generators for
 [Obsidian](https://obsidian.md) — built for TTRPGs and creative
